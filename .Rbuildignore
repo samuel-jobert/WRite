@@ -1,0 +1,9 @@
+^todo\.md$
+^notes\.md$
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.vscode$
+^dev-tools$
+^GUIDE_CRAN\.md$
+^cran-comments\.md$
+^WRite_logo\.png$
