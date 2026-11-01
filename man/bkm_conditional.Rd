@@ -22,8 +22,10 @@ bkm_conditional(doc, name, condition, keep_bookmark = TRUE)
 Keeps or removes the content of a bookmark depending on a condition. If
 \code{condition} is \code{FALSE}, the bookmark and its content are removed: when the
 bookmark covers whole paragraphs (or table rows), they are removed
-completely, without leaving an empty paragraph. The markers of the other
-bookmarks are preserved (see \code{\link[=bkm_delete]{bkm_delete()}}).
+completely, without leaving an empty paragraph; when it covers only part
+of a paragraph, just its content is removed (as \code{\link[=bkm_delete]{bkm_delete()}} with
+\code{delete_paragraph = FALSE}). The markers of the other bookmarks are
+preserved (see \code{\link[=bkm_delete]{bkm_delete()}}).
 }
 \section{Illustration}{
 

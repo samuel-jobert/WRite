@@ -103,8 +103,10 @@ doc_fill <- function(doc, values, tags = c("{{", "}}"), bookmarks = TRUE, warn =
 #' Keeps or removes the content of a bookmark depending on a condition. If
 #' `condition` is `FALSE`, the bookmark and its content are removed: when the
 #' bookmark covers whole paragraphs (or table rows), they are removed
-#' completely, without leaving an empty paragraph. The markers of the other
-#' bookmarks are preserved (see [bkm_delete()]).
+#' completely, without leaving an empty paragraph; when it covers only part
+#' of a paragraph, just its content is removed (as [bkm_delete()] with
+#' `delete_paragraph = FALSE`). The markers of the other bookmarks are
+#' preserved (see [bkm_delete()]).
 #'
 #' @param doc WRite document object.
 #' @param name Name of the bookmark delimiting the block.
@@ -147,12 +149,11 @@ bkm_conditional <- function(doc, name, condition, keep_bookmark = TRUE) {
     return(invisible(doc))
   }
   block <- .bookmark_block(bkm)
-  if (!is.null(block) && block$aligned) {
-    .remove_elements(block$elements, bkm$id)
-    for (m in list(bkm$start, bkm$end)) if (.attached(m)) xml2::xml_remove(m)
+  aligned <- !is.null(block) && block$aligned
+  if (aligned && .name(block$elements[[1]]) == "w:tr") {
+    .delete_blocks(block$elements, bkm)
   } else {
-    .empty_range(bkm)
-    .remove_markers(bkm)
+    .delete_one(bkm, delete_bookmark = TRUE, delete_paragraph = aligned)
   }
   }, NULL)
   invisible(doc)

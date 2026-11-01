@@ -103,7 +103,7 @@ doc_new <- function() {
 #' doc |> doc_fill(list(amount_2025 = "2,000,000")) |> doc_save(f1)
 #'
 #' # Several successive versions of the same object
-#' bkm_delete(doc, "my_bookmark", delete_content = TRUE)
+#' bkm_delete(doc, "my_bookmark", delete_paragraph = FALSE)
 #' doc_save(doc, f2)
 #' file.exists(c(f1, f2))
 #' @export

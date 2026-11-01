@@ -118,6 +118,73 @@
   invisible()
 }
 
+# Block elements (paragraphs, tables, rows...) containing the bookmark, from the
+# one holding its start to the one holding its end: children of their closest
+# common container. Cells are never returned (their row is taken instead).
+# As Word does when whole paragraphs are selected, a marker placed at the very
+# start (end) of a paragraph other than the one of the other marker does not
+# include this paragraph.
+.containing_blocks <- function(bkm) {
+  not_markers <- "[not(self::w:bookmarkStart or self::w:bookmarkEnd or self::w:proofErr)]"
+  at_edge <- function(m, p, axis) {
+    identical(xml2::xml_parent(m), p) &&
+      .count(m, sprintf("count(%s-sibling::*%s[not(self::w:pPr)])", axis, not_markers)) == 0
+  }
+  p_s <- .paragraph_of(bkm$start)
+  p_e <- .paragraph_of(bkm$end)
+  d <- p_s
+  f <- p_e
+  if (is.null(p_s)) {
+    d <- .find1(bkm$start, sprintf("following-sibling::*%s[1]", not_markers))
+  } else if (!identical(p_s, p_e) && at_edge(bkm$start, p_s, "following")) {
+    d <- .find1(p_s, sprintf("following-sibling::*%s[1]", not_markers))
+  }
+  if (is.null(p_e)) {
+    f <- .find1(bkm$end, sprintf("preceding-sibling::*%s[1]", not_markers))
+  } else if (!identical(p_s, p_e) && at_edge(bkm$end, p_e, "preceding")) {
+    f <- .find1(p_e, sprintf("preceding-sibling::*%s[1]", not_markers))
+  }
+  if (.is_missing(d) || .is_missing(f)) return(NULL)
+  # Closest common container: first divergence of the ancestor chains.
+  anc_d <- as.list(.find_all(d, "ancestor-or-self::*"))
+  anc_f <- as.list(.find_all(f, "ancestor-or-self::*"))
+  k <- 1
+  while (k <= min(length(anc_d), length(anc_f)) && identical(anc_d[[k]], anc_f[[k]])) k <- k + 1
+  if (k == 1) return(NULL)
+  d <- if (k <= length(anc_d)) anc_d[[k]] else anc_d[[k - 1]]
+  f <- if (k <= length(anc_f)) anc_f[[k]] else anc_f[[k - 1]]
+  if (.name(d) == "w:tc") {
+    d <- xml2::xml_parent(d)
+    f <- xml2::xml_parent(f)
+  }
+  if (.name(d) %in% c("w:body", "w:document", "w:hdr", "w:ftr", "w:footnotes", "w:endnotes") ||
+      !identical(xml2::xml_parent(d), xml2::xml_parent(f)) || .index(d) > .index(f)) {
+    return(NULL)
+  }
+  .siblings_between(d, f, xml2::xml_parent(d))
+}
+
+# Deletes whole block elements with the markers of the bookmark, preserving
+# the markers of the other bookmarks.
+.delete_blocks <- function(elements, bkm) {
+  .remove_elements(elements, bkm$id)
+  for (m in list(bkm$start, bkm$end)) if (.attached(m)) xml2::xml_remove(m)
+  invisible(bkm)
+}
+
+# Deletes the paragraphs (or other block elements) containing the bookmark.
+# Without any whole block (e.g. empty bookmark across a paragraph boundary),
+# only the content and the markers are deleted.
+.delete_paragraphs <- function(bkm) {
+  elements <- .containing_blocks(bkm)
+  if (is.null(elements)) {
+    .empty_range(bkm)
+    .remove_markers(bkm)
+    return(invisible(bkm))
+  }
+  .delete_blocks(elements, bkm)
+}
+
 #' List the bookmarks of a document
 #'
 #' @param doc WRite document object.
@@ -175,15 +242,24 @@ bkm_text <- function(doc, name) {
 
 #' Delete a bookmark
 #'
-#' By default, deletes the content surrounded by the bookmark and keeps the
-#' (now empty) bookmark. When deleting the content, the start/end markers of
-#' **other** bookmarks found in it are kept (the end of a preceding bookmark is
-#' moved before the start of the deleted bookmark, the start of a following
-#' bookmark after its end, and a bookmark entirely inside the deleted content
-#' is kept, empty), so that these bookmarks are not destroyed.
+#' By default, deletes the whole paragraph(s) containing the bookmark, from the
+#' paragraph of its start to the paragraph of its end, bookmark included (no
+#' empty paragraph is left). With `delete_paragraph = FALSE`, only the content
+#' surrounded by the bookmark is deleted and the (now empty) bookmark is kept.
+#' In both cases, the start/end markers of **other** bookmarks found in the
+#' deleted content are kept (the end of a preceding bookmark is moved before
+#' the deleted content, the start of a following bookmark after it, and a
+#' bookmark entirely inside the deleted content is kept, empty), so that these
+#' bookmarks are not destroyed.
 #'
-#' In a table, the content of the cell is deleted by default. With
-#' `delete_row = TRUE`, the whole row containing the bookmark is deleted:
+#' If the bookmark starts and ends in different structures (e.g. in a paragraph
+#' and in a table), the whole elements between them are deleted (the table
+#' included); if it starts and ends in different cells of the same table, the
+#' corresponding rows are deleted.
+#'
+#' In a table, the paragraphs (or the content) of the cell are deleted by
+#' default. With `delete_row = TRUE`, the whole row containing the bookmark is
+#' deleted:
 #'
 #' * if the bookmark is in a cell merged vertically, all the rows of this
 #'   merged cell are deleted;
@@ -200,7 +276,12 @@ bkm_text <- function(doc, name) {
 #'   warning is given and the other bookmarks are still processed.
 #'   Not used if `whole_document = TRUE`.
 #' @param delete_content Delete the content of the bookmark?
-#' @param delete_bookmark Delete the markers of the bookmark?
+#' @param delete_bookmark Delete the markers of the bookmark? Ignored (always
+#'   deleted) when the paragraph is deleted.
+#' @param delete_paragraph When deleting the content, delete the whole
+#'   paragraph(s) containing the bookmark, with its markers? If `FALSE`, only
+#'   the content between the markers is deleted. Ignored if
+#'   `delete_content = FALSE`.
 #' @param whole_document Delete all the bookmark markers of the document
 #'   (no content is deleted; the other arguments are ignored)?
 #' @param delete_row If the bookmark is in a table, delete its row (see
@@ -209,13 +290,16 @@ bkm_text <- function(doc, name) {
 #' @section Illustration:
 #' ```
 #' Before                      : Price [a: 10 [b: euros]] incl. tax
-#' delete_content = TRUE       : Price [a: ] incl. tax
+#' defaults                    : (the paragraph is deleted)
+#' delete_paragraph = FALSE    : Price [a: ] incl. tax
 #' delete_content = FALSE,
 #'   delete_bookmark = TRUE    : Price 10 [b: euros] incl. tax
-#' both TRUE                   : Price  incl. tax
+#' delete_paragraph = FALSE,
+#'   delete_bookmark = TRUE    : Price  incl. tax
 #'
 #' Overlapping bookmarks       : text "Price 10 euros incl. tax", b = "Price 10", a = "10 euros"
-#' delete a with its content   : text "Price  incl. tax", b = "Price " (the end of b, located in a, is preserved)
+#' delete a, delete_paragraph = FALSE,
+#'   delete_bookmark = TRUE    : text "Price  incl. tax", b = "Price " (the end of b, located in a, is preserved)
 #' ```
 #' @examples
 #' doc <- doc_read(write_example("example"))
@@ -225,19 +309,25 @@ bkm_text <- function(doc, name) {
 #' "Middle" %in% doc_text(doc)                 # TRUE
 #' "my_bookmark" %in% bkm_list(doc)$name       # FALSE
 #'
-#' # Remove the content (the empty bookmark stays)
-#' bkm_delete(doc, "amount_2025")
+#' # Remove only the content (the empty bookmark stays)
+#' bkm_delete(doc, "amount_2025", delete_paragraph = FALSE)
 #' doc_text(doc)[4]   # "The order amount is  euros in 2025."
+#'
+#' # Remove the whole paragraph containing the bookmark
+#' n <- length(doc_text(doc))
+#' bkm_delete(doc, "amount_2025")
+#' length(doc_text(doc)) == n - 1   # TRUE
 #'
 #' # Remove all the bookmarks of the document (the text stays)
 #' bkm_delete(doc, whole_document = TRUE)
 #' nrow(bkm_list(doc))   # 0
 #' @export
 bkm_delete <- function(doc, name = NULL, delete_content = TRUE, delete_bookmark = FALSE,
-                       whole_document = FALSE, delete_row = FALSE) {
+                       delete_paragraph = TRUE, whole_document = FALSE, delete_row = FALSE) {
   .check_doc(doc)
   .check_flag(delete_content, "delete_content")
   .check_flag(delete_bookmark, "delete_bookmark")
+  .check_flag(delete_paragraph, "delete_paragraph")
   .check_flag(whole_document, "whole_document")
   .check_flag(delete_row, "delete_row")
   if (whole_document) {
@@ -251,14 +341,23 @@ bkm_delete <- function(doc, name = NULL, delete_content = TRUE, delete_bookmark 
   }
   for (nm in unique(name)) {
     tryCatch({
-      bkm <- .bkm_find(doc, nm)
-      if (!(delete_row && .delete_table_rows(bkm))) {
-        if (delete_content) .empty_range(bkm)
-        if (delete_bookmark) .remove_markers(bkm)
-      }
+      .delete_one(.bkm_find(doc, nm), delete_content, delete_bookmark, delete_paragraph, delete_row)
     }, error = function(e) warning(sprintf("%s Bookmark ignored.", conditionMessage(e)), call. = FALSE))
   }
   invisible(doc)
+}
+
+# Core of bkm_delete() for one bookmark (errors are left to the caller).
+.delete_one <- function(bkm, delete_content = TRUE, delete_bookmark = FALSE,
+                        delete_paragraph = TRUE, delete_row = FALSE) {
+  if (delete_row && .delete_table_rows(bkm)) return(invisible(bkm))
+  if (delete_content && delete_paragraph) {
+    .delete_paragraphs(bkm)
+  } else {
+    if (delete_content) .empty_range(bkm)
+    if (delete_bookmark) .remove_markers(bkm)
+  }
+  invisible(bkm)
 }
 
 # "none", "restart" or "continue" (vertical merge) for a w:tc (NULL = none).

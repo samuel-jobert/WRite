@@ -95,7 +95,7 @@ reassignment. To work on an independent copy, use `doc_copy()`.
 |---|---|
 | `bkm_list(doc)` | `data.frame` of bookmarks: `name`, `id`, `part`, `text`. |
 | `bkm_text(doc, name)` | Text contained in a bookmark. |
-| `bkm_delete(doc, name, delete_content = TRUE, delete_bookmark = FALSE, whole_document = FALSE, delete_row = FALSE)` | Deletes the content of one or several bookmarks, optionally the bookmark itself (or all the bookmarks of the document), or the table row containing it. |
+| `bkm_delete(doc, name, delete_content = TRUE, delete_bookmark = FALSE, delete_paragraph = TRUE, whole_document = FALSE, delete_row = FALSE)` | Deletes the paragraph(s) containing one or several bookmarks (or only their content with `delete_paragraph = FALSE`), optionally the bookmark itself (or all the bookmarks of the document), or the table row containing it. |
 | `bkm_replace_text(doc, name, text, keep_bookmark = TRUE, html = FALSE, style)` | Replaces the content while keeping the existing formatting. |
 | `bkm_insert_text(doc, name, text, position, bold, italic, underline, size, font, style, keep_bookmark, keep_with_previous, keep_lines_together, html)` | Inserts formatted text. |
 | `bkm_insert_page_break(doc, name, position, keep_bookmark)` | Inserts a page break. |
@@ -178,8 +178,13 @@ add their formatting to it. `html = TRUE` is also available in `bkm_insert_text(
 
 #### Deleting content and neighbouring bookmarks
 
-When the content of a bookmark is removed (`bkm_delete(...,
-delete_content = TRUE)`, or `position = "replace"`), the markers of the
+By default, `bkm_delete()` removes the whole paragraph(s) containing the
+bookmark (from the paragraph of its start to the paragraph of its end, markers
+included), without leaving an empty paragraph. With `delete_paragraph = FALSE`,
+only the content between the markers is removed.
+
+When the content of a bookmark is removed (`bkm_delete()`, or
+`position = "replace"`), the markers of the
 **other** bookmarks present in that content are kept:
 
 * the end of a bookmark that starts earlier is moved just before the start of
@@ -192,8 +197,9 @@ bookmark is in a vertically merged cell, all the rows of the merged cell are
 deleted; if only other cells of the row are merged, just this row is deleted
 and the merged value is kept (moved to the next row of the merged cell).
 
-If the bookmark spans several paragraphs, they are merged (as when deleting in
-Word).
+If the bookmark spans several paragraphs, they are all deleted; with
+`delete_paragraph = FALSE` (or `position = "replace"`), they are merged (as
+when deleting in Word).
 
 #### Inserting a Word document
 

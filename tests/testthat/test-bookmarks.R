@@ -11,7 +11,7 @@ test_that("bkm_delete removes the markers without touching the text", {
 
 test_that("bkm_delete with content keeps the end of a preceding bookmark", {
   doc <- doc_from_xml(p_xml(s_xml(1, "b"), r_xml("XX"), s_xml(2, "a"), e_xml(1), r_xml("YY"), e_xml(2), r_xml("ZZ")))
-  bkm_delete(doc, "a", delete_content = TRUE, delete_bookmark = TRUE)
+  bkm_delete(doc, "a", delete_content = TRUE, delete_bookmark = TRUE, delete_paragraph = FALSE)
   expect_equal(bkm_list(doc)$name, "b")
   expect_equal(bkm_text(doc, "b"), "XX")
   expect_false(grepl("YY", body_xml(doc)))
@@ -20,14 +20,14 @@ test_that("bkm_delete with content keeps the end of a preceding bookmark", {
 
 test_that("bkm_delete with content keeps the start of a following bookmark", {
   doc <- doc_from_xml(p_xml(s_xml(1, "a"), r_xml("AA"), s_xml(2, "c"), r_xml("BB"), e_xml(1), r_xml("CC"), e_xml(2)))
-  bkm_delete(doc, "a", delete_content = TRUE, delete_bookmark = TRUE)
+  bkm_delete(doc, "a", delete_content = TRUE, delete_bookmark = TRUE, delete_paragraph = FALSE)
   expect_equal(bkm_list(doc)$name, "c")
   expect_equal(bkm_text(doc, "c"), "CC")
 })
 
 test_that("bookmarks nested in the deleted content are kept (empty)", {
   doc <- doc_from_xml(p_xml(s_xml(1, "a"), r_xml("A"), s_xml(2, "n"), r_xml("N"), e_xml(2), e_xml(1)))
-  bkm_delete(doc, "a", delete_content = TRUE, delete_bookmark = TRUE)
+  bkm_delete(doc, "a", delete_content = TRUE, delete_bookmark = TRUE, delete_paragraph = FALSE)
   expect_equal(bkm_list(doc)$name, "n")
   expect_equal(bkm_text(doc, "n"), "")
 })
@@ -132,10 +132,10 @@ bk <- function(id, name) list(id = id, name = name)
 
 test_that("bkm_delete: defaults, delete_bookmark, lists and whole_document", {
   doc <- doc_from_xml(paste0(p_xml(s_xml(1, "a"), r_xml("A"), e_xml(1)), p_xml(s_xml(2, "b"), r_xml("B"), e_xml(2))))
-  bkm_delete(doc, "a")
+  bkm_delete(doc, "a", delete_paragraph = FALSE)
   expect_equal(bkm_text(doc, "a"), "")
   expect_true("a" %in% bkm_list(doc)$name)
-  expect_warning(bkm_delete(doc, c("a", "zzz", "b"), delete_bookmark = TRUE), "zzz")
+  expect_warning(bkm_delete(doc, c("a", "zzz", "b"), delete_bookmark = TRUE, delete_paragraph = FALSE), "zzz")
   expect_equal(nrow(bkm_list(doc)), 0)
   expect_false(any(nzchar(doc_text(doc))))
   doc2 <- doc_from_xml(paste0(p_xml(s_xml(1, "a"), r_xml("A"), e_xml(1))))
@@ -144,10 +144,92 @@ test_that("bkm_delete: defaults, delete_bookmark, lists and whole_document", {
   expect_equal(doc_text(doc2), "A")
 })
 
-test_that("bkm_delete: table cell content and row", {
+test_that("bkm_delete deletes the whole paragraph by default", {
+  mk <- function() doc_from_xml(paste0(
+    p_xml(r_xml("A")), p_xml(r_xml("Before "), s_xml(1, "x"), r_xml("X"), e_xml(1), r_xml(" after")), p_xml(r_xml("B"))))
+  d <- mk(); bkm_delete(d, "x")
+  expect_equal(doc_text(d), c("A", "B"))
+  expect_equal(nrow(bkm_list(d)), 0)
+  # delete_bookmark has no effect: the markers go with the paragraph
+  d <- mk(); bkm_delete(d, "x", delete_bookmark = FALSE)
+  expect_equal(nrow(bkm_list(d)), 0)
+  # delete_content = FALSE: nothing deleted
+  d <- mk(); bkm_delete(d, "x", delete_content = FALSE)
+  expect_equal(doc_text(d), c("A", "Before X after", "B"))
+  expect_equal(bkm_list(d)$name, "x")
+  # Only the content
+  d <- mk(); bkm_delete(d, "x", delete_paragraph = FALSE)
+  expect_equal(doc_text(d), c("A", "Before  after", "B"))
+  expect_equal(bkm_text(d, "x"), "")
+  expect_error(bkm_delete(d, "x", delete_paragraph = NA), "TRUE or FALSE")
+})
+
+test_that("bkm_delete: paragraph deletion over several paragraphs preserves other bookmarks", {
+  doc <- doc_from_xml(paste0(
+    p_xml(s_xml(1, "before"), r_xml("A")),
+    p_xml(r_xml("P1 "), s_xml(2, "x"), r_xml("X1"), e_xml(1)),
+    p_xml(s_xml(3, "inner"), r_xml("X2"), e_xml(3)),
+    p_xml(r_xml("X3"), e_xml(2), s_xml(4, "after"), r_xml(" P3")),
+    p_xml(r_xml("B"), e_xml(4))))
+  bkm_delete(doc, "x")
+  expect_equal(doc_text(doc), c("A", "B"))
+  expect_setequal(bkm_list(doc)$name, c("before", "inner", "after"))
+  expect_equal(bkm_text(doc, "before"), "A")
+  expect_equal(bkm_text(doc, "inner"), "")
+  expect_equal(bkm_text(doc, "after"), "B")
+  # Bookmark end directly in the body (after the paragraph)
+  doc2 <- doc_from_xml(paste0(p_xml(r_xml("A")), p_xml(s_xml(1, "c"), r_xml("C1")), p_xml(r_xml("C2")), e_xml(1), p_xml(r_xml("B"))))
+  bkm_delete(doc2, "c")
+  expect_equal(doc_text(doc2), c("A", "B"))
+  expect_equal(nrow(bkm_list(doc2)), 0)
+  # Last paragraph of the body: the document stays valid once saved
+  doc3 <- doc_from_xml(p_xml(s_xml(1, "x"), r_xml("X"), e_xml(1)))
+  bkm_delete(doc3, "x")
+  expect_equal(doc_text(round_trip(doc3), keep_empty = TRUE), "")
+  # Case produced by Word: bookmark end at the start of the next paragraph, which is kept
+  doc4 <- doc_from_xml(paste0(p_xml(s_xml(1, "c"), r_xml("C")), p_xml(e_xml(1), r_xml("B"))))
+  bkm_delete(doc4, "c")
+  expect_equal(doc_text(doc4), "B")
+  # ... but an end in the middle of the next paragraph deletes it
+  doc5 <- doc_from_xml(paste0(p_xml(s_xml(1, "c"), r_xml("C")), p_xml(r_xml("B"), e_xml(1), r_xml("2"))))
+  bkm_delete(doc5, "c")
+  expect_equal(doc_text(doc5, keep_empty = TRUE), character())
+  # Empty bookmark across a paragraph boundary: the paragraphs are merged
+  doc6 <- doc_from_xml(paste0(p_xml(r_xml("A"), s_xml(1, "c")), p_xml(e_xml(1), r_xml("B"))))
+  bkm_delete(doc6, "c")
+  expect_equal(doc_text(doc6), "AB")
+  expect_equal(nrow(bkm_list(doc6)), 0)
+})
+
+test_that("bkm_delete: paragraph deletion in a table cell and across structures", {
   mk <- function() doc_from_xml(tbl_xml(
     paste0(cell_xml("a1", bk(1, "a")), cell_xml("a2", bk(2, "other"))), paste0(cell_xml("b1"), cell_xml("b2"))))
   d <- mk(); bkm_delete(d, "a")
+  expect_equal(.count(.xml(d, d$main), "count(//w:tr)"), 2)
+  expect_equal(.count(.xml(d, d$main), "count(//w:tc[1]/w:p)"), 2)   # an empty paragraph is kept in the cell
+  expect_equal(bkm_list(d)$name, "other")
+  expect_false(grepl("a1", body_xml(d)))
+  # Start and end in different cells of a table: the rows are deleted
+  d <- doc_from_xml(paste0("<w:tbl><w:tblPr/>",
+    "<w:tr><w:tc>", p_xml(r_xml("h")), "</w:tc></w:tr>",
+    "<w:tr><w:tc>", p_xml(s_xml(1, "x"), r_xml("1")), "</w:tc></w:tr>",
+    "<w:tr><w:tc>", p_xml(r_xml("2"), e_xml(1)), "</w:tc></w:tr>",
+    "</w:tbl>", p_xml(r_xml("after"))))
+  bkm_delete(d, "x")
+  expect_equal(.count(.xml(d, d$main), "count(//w:tr)"), 1)
+  expect_equal(doc_text(d), c("h", "after"))
+  # Start in a paragraph, end in a table: the paragraph and the table are deleted
+  d <- doc_from_xml(paste0(p_xml(r_xml("A")), p_xml(s_xml(1, "x"), r_xml("P")),
+    "<w:tbl><w:tblPr/><w:tr><w:tc>", p_xml(r_xml("c"), e_xml(1)), "</w:tc></w:tr></w:tbl>", p_xml(r_xml("B"))))
+  bkm_delete(d, "x")
+  expect_equal(.count(.xml(d, d$main), "count(//w:tbl)"), 0)
+  expect_equal(doc_text(d), c("A", "B"))
+})
+
+test_that("bkm_delete: table cell content and row", {
+  mk <- function() doc_from_xml(tbl_xml(
+    paste0(cell_xml("a1", bk(1, "a")), cell_xml("a2", bk(2, "other"))), paste0(cell_xml("b1"), cell_xml("b2"))))
+  d <- mk(); bkm_delete(d, "a", delete_paragraph = FALSE)
   expect_equal(.count(.xml(d, d$main), "count(//w:tr)"), 2)
   expect_equal(bkm_text(d, "a"), "")
   d <- mk(); bkm_delete(d, "a", delete_row = TRUE)

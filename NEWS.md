@@ -21,6 +21,8 @@
 * `doc_clean()`: new options `spelling`, `comments`, `revisions` and `all`.
 * `bkm_delete()`: `delete_content` is now `TRUE` by default; new `delete_bookmark`,
   `whole_document` and `delete_row` (table rows, merged cells) options; `name` can be a vector.
+  New `delete_paragraph` option (`TRUE` by default): the whole paragraph(s) containing the
+  bookmark are deleted, markers included; `delete_paragraph = FALSE` only deletes the content.
 * `doc_add_style()`: creates a Word style (paragraph or character) usable by name
   in the `style` argument of the insertion functions; `bkm_replace_text()`
   gets a `style` argument.

@@ -9,6 +9,7 @@ bkm_delete(
   name = NULL,
   delete_content = TRUE,
   delete_bookmark = FALSE,
+  delete_paragraph = TRUE,
   whole_document = FALSE,
   delete_row = FALSE
 )
@@ -23,7 +24,13 @@ Not used if \code{whole_document = TRUE}.}
 
 \item{delete_content}{Delete the content of the bookmark?}
 
-\item{delete_bookmark}{Delete the markers of the bookmark?}
+\item{delete_bookmark}{Delete the markers of the bookmark? Ignored (always
+deleted) when the paragraph is deleted.}
+
+\item{delete_paragraph}{When deleting the content, delete the whole
+paragraph(s) containing the bookmark, with its markers? If \code{FALSE}, only
+the content between the markers is deleted. Ignored if
+\code{delete_content = FALSE}.}
 
 \item{whole_document}{Delete all the bookmark markers of the document
 (no content is deleted; the other arguments are ignored)?}
@@ -35,16 +42,25 @@ Details)?}
 \code{doc}, invisibly.
 }
 \description{
-By default, deletes the content surrounded by the bookmark and keeps the
-(now empty) bookmark. When deleting the content, the start/end markers of
-\strong{other} bookmarks found in it are kept (the end of a preceding bookmark is
-moved before the start of the deleted bookmark, the start of a following
-bookmark after its end, and a bookmark entirely inside the deleted content
-is kept, empty), so that these bookmarks are not destroyed.
+By default, deletes the whole paragraph(s) containing the bookmark, from the
+paragraph of its start to the paragraph of its end, bookmark included (no
+empty paragraph is left). With \code{delete_paragraph = FALSE}, only the content
+surrounded by the bookmark is deleted and the (now empty) bookmark is kept.
+In both cases, the start/end markers of \strong{other} bookmarks found in the
+deleted content are kept (the end of a preceding bookmark is moved before
+the deleted content, the start of a following bookmark after it, and a
+bookmark entirely inside the deleted content is kept, empty), so that these
+bookmarks are not destroyed.
 }
 \details{
-In a table, the content of the cell is deleted by default. With
-\code{delete_row = TRUE}, the whole row containing the bookmark is deleted:
+If the bookmark starts and ends in different structures (e.g. in a paragraph
+and in a table), the whole elements between them are deleted (the table
+included); if it starts and ends in different cells of the same table, the
+corresponding rows are deleted.
+
+In a table, the paragraphs (or the content) of the cell are deleted by
+default. With \code{delete_row = TRUE}, the whole row containing the bookmark is
+deleted:
 \itemize{
 \item if the bookmark is in a cell merged vertically, all the rows of this
 merged cell are deleted;
@@ -60,13 +76,16 @@ The other bookmarks having a marker in a deleted row are deleted as well.
 
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{Before                      : Price [a: 10 [b: euros]] incl. tax
-delete_content = TRUE       : Price [a: ] incl. tax
+defaults                    : (the paragraph is deleted)
+delete_paragraph = FALSE    : Price [a: ] incl. tax
 delete_content = FALSE,
   delete_bookmark = TRUE    : Price 10 [b: euros] incl. tax
-both TRUE                   : Price  incl. tax
+delete_paragraph = FALSE,
+  delete_bookmark = TRUE    : Price  incl. tax
 
 Overlapping bookmarks       : text "Price 10 euros incl. tax", b = "Price 10", a = "10 euros"
-delete a with its content   : text "Price  incl. tax", b = "Price " (the end of b, located in a, is preserved)
+delete a, delete_paragraph = FALSE,
+  delete_bookmark = TRUE    : text "Price  incl. tax", b = "Price " (the end of b, located in a, is preserved)
 }\if{html}{\out{</div>}}
 }
 
@@ -78,9 +97,14 @@ bkm_delete(doc, "my_bookmark", delete_content = FALSE, delete_bookmark = TRUE)
 "Middle" \%in\% doc_text(doc)                 # TRUE
 "my_bookmark" \%in\% bkm_list(doc)$name       # FALSE
 
-# Remove the content (the empty bookmark stays)
-bkm_delete(doc, "amount_2025")
+# Remove only the content (the empty bookmark stays)
+bkm_delete(doc, "amount_2025", delete_paragraph = FALSE)
 doc_text(doc)[4]   # "The order amount is  euros in 2025."
+
+# Remove the whole paragraph containing the bookmark
+n <- length(doc_text(doc))
+bkm_delete(doc, "amount_2025")
+length(doc_text(doc)) == n - 1   # TRUE
 
 # Remove all the bookmarks of the document (the text stays)
 bkm_delete(doc, whole_document = TRUE)
