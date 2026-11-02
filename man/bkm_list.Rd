@@ -11,7 +11,8 @@ bkm_list(doc)
 }
 \value{
 A \code{data.frame} with columns \code{name}, \code{id}, \code{part} (XML part
-containing the bookmark: body, header, footer, notes) and \code{text}.
+containing the bookmark: body, header, footer, notes) and \code{text}
+(same conventions as \code{\link[=bkm_text]{bkm_text()}}).
 }
 \description{
 List the bookmarks of a document

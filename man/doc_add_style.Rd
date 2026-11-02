@@ -23,6 +23,10 @@ doc_add_style(
   indent_first_line = NULL,
   keep_with_next = NULL,
   keep_lines_together = NULL,
+  bullet = NULL,
+  bullet_font = NULL,
+  bullet_indent = NULL,
+  bullet_spacing = NULL,
   type = c("paragraph", "character"),
   based_on = NULL,
   overwrite = FALSE
@@ -63,6 +67,21 @@ hanging indent).}
 \item{keep_lines_together}{Keep all the lines of the paragraph on the same
 page?}
 
+\item{bullet}{Bullet of the paragraphs of the style (paragraph style only):
+a predefined name (\code{"disc"}, \code{"circle"}, \code{"square"}, \code{"dash"}, \code{"arrow"},
+\code{"check"}, see the "Bullets" section) or any character (\code{"→"},
+\code{"★"}...). \code{NULL} (default) = no bullet.}
+
+\item{bullet_font}{Font of the bullet (by default the font of the predefined
+bullet, or that of the text for another character).}
+
+\item{bullet_indent}{Position of the bullet from the left margin, in cm
+(default 0.63, as in Word).}
+
+\item{bullet_spacing}{Distance between the bullet and the start of the text,
+in cm (default 0.63, as in Word). The text (and the following lines) start
+at \code{bullet_indent + bullet_spacing}.}
+
 \item{type}{\code{"paragraph"} (default) or \code{"character"}.}
 
 \item{based_on}{Style (identifier or name) the new one is based on (default
@@ -90,6 +109,33 @@ insertion functions (\code{bold = TRUE}...) takes precedence over the style.
 next" set on the previous paragraph): use the \code{keep_with_previous} argument
 of the insertion functions for it.
 }
+\section{Bullets}{
+
+A style with a \code{bullet} is a bulleted list style: each paragraph of this
+style starts with the bullet. The bullet is defined in the document (list
+definition in its numbering part, created if needed), so it is kept when
+the document is opened in Word and when paragraphs of this style are
+inserted in another document with \code{\link[=bkm_insert_doc]{bkm_insert_doc()}}.\tabular{lll}{
+   \code{bullet} \tab Bullet \tab Character, font \cr
+   \code{"disc"} \tab black disc (Word default) \tab U+F0B7, Symbol \cr
+   \code{"circle"} \tab white circle \tab \code{"o"}, Courier New \cr
+   \code{"square"} \tab black square \tab U+F0A7, Wingdings \cr
+   \code{"dash"} \tab en dash \tab U+2013, font of the text \cr
+   \code{"arrow"} \tab arrowhead \tab U+F0D8, Wingdings \cr
+   \code{"check"} \tab check mark \tab U+F0FC, Wingdings \cr
+}
+
+
+The position of the bullet and of the text are set with \code{bullet_indent} and
+\code{bullet_spacing} (like "Adjust list indents" in Word), which replace
+\code{indent_left} and \code{indent_first_line} for a bulleted style:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{margin
+ |<- bullet_indent ->*<- bullet_spacing ->Text of the first line
+ |                                        following lines, aligned on the text
+}\if{html}{\out{</div>}}
+}
+
 \examples{
 doc <- doc_new() |>
   doc_add_style("Quote", font = "Georgia", size = 11, italic = TRUE,
@@ -101,4 +147,13 @@ doc_add_paragraph(doc, "To be or not to be.", style = "Quote")
 doc_add_paragraph(doc, "Result: ", bookmark = "res")
 bkm_insert_text(doc, "res", "important", position = "after", style = "Highlight")
 doc_text(doc)
+
+# Bulleted lists
+doc_add_style(doc, "List", bullet = "disc", size = 10)
+doc_add_style(doc, "Sub-list", bullet = "dash", bullet_indent = 1.27,
+              bullet_spacing = 0.5)
+doc_add_style(doc, "Arrows", bullet = "\u2192", bullet_font = "Segoe UI Symbol",
+              bullet_indent = 0)
+doc_add_paragraph(doc, "First point\rSecond point", style = "List")
+doc_add_paragraph(doc, "Detail", style = "Sub-list")
 }

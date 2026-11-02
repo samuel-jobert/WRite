@@ -25,8 +25,8 @@ doc_add_paragraph(
 \arguments{
 \item{doc}{WRite document object.}
 
-\item{text}{Paragraph text. \code{"\\n"} = line break, \code{"\\n\\n"} = new paragraph,
-\code{"\\t"} = tab.}
+\item{text}{Paragraph text: \code{"\\n"} = line break, \code{"\\r"} = new paragraph,
+\code{"\\t"} = tab, \code{"\\f"} = page break (see the "Special characters" section).}
 
 \item{bold, italic}{\code{TRUE}/\code{FALSE} (\code{NULL} = inherited from the style).}
 
@@ -50,9 +50,9 @@ page.}
 page (Word "Keep lines together" option).}
 
 \item{html}{Interpret HTML tags in \code{text}? Supported: \verb{<b>}/\verb{<strong>},
-\verb{<i>}/\verb{<em>}, \verb{<u>}, \verb{<s>}/\verb{<strike>}/\verb{<del>} (can be nested) and \verb{<br>}
-(line break). Other tags are kept as text; \verb{&lt;}, \verb{&gt;}, \verb{&amp;} and
-\verb{&nbsp;} are decoded.}
+\verb{<i>}/\verb{<em>}, \verb{<u>}, \verb{<s>}/\verb{<strike>}/\verb{<del>} (can be nested), \verb{<br>}
+(line break) and \verb{<p>...</p>} (paragraphs). Other tags are kept as text;
+\verb{&lt;}, \verb{&gt;}, \verb{&amp;} and \verb{&nbsp;} are decoded.}
 
 \item{at_text}{Text of the document next to which the paragraph is inserted
 (\code{NULL} = end of the document). The search covers the body, headers,
@@ -77,6 +77,31 @@ Adds a paragraph at the end of the document body (or next to a given text),
 with optional formatting, and can surround it with a bookmark (useful to
 prepare a document created by \code{\link[=doc_new]{doc_new()}}).
 }
+\section{Special characters}{
+
+All the functions that insert or replace text (\code{\link[=doc_add_paragraph]{doc_add_paragraph()}},
+\code{\link[=bkm_insert_text]{bkm_insert_text()}}, \code{\link[=bkm_replace_text]{bkm_replace_text()}}, \code{\link[=doc_replace_text]{doc_replace_text()}},
+\code{\link[=doc_fill]{doc_fill()}}, \code{\link[=bkm_repeat]{bkm_repeat()}}, \code{\link[=doc_mail_merge]{doc_mail_merge()}}) interpret the texts in
+the same way:
+\itemize{
+\item \code{"\\n"} (or \code{"\\v"}): line break within the paragraph (Shift+Enter in
+Word); \code{"\\n\\n"} gives two line breaks;
+\item \code{"\\r"}: new paragraph, with the properties (style, indentation,
+alignment...) of the paragraph where the text is inserted;
+\item \code{"\\t"}: tab; \code{"\\f"}: page break;
+\item \code{"\\r\\n"} (Windows line end, for example a text typed in a form) is a
+line break, not a new paragraph.
+}
+
+With \code{html = TRUE}, \verb{<br>} is a line break and \verb{<p>...</p>} delimit
+paragraphs.
+
+Only these control characters are interpreted: the two characters
+backslash and \code{n} (written \code{"\\\\n"} in R) stay as they are in the text.
+\code{\link[=bkm_text]{bkm_text()}} and \code{\link[=bkm_list]{bkm_list()}} return the texts with the same conventions
+(paragraphs separated by \code{"\\r"}).
+}
+
 \section{Illustration}{
 
 
@@ -110,7 +135,7 @@ doc_add_paragraph(doc, "Conclusion text", keep_with_previous = TRUE,
 # Rich text (HTML tags) and several paragraphs
 doc_add_paragraph(doc, "Normal, <b>bold</b>, <i>italic</i> and <s>struck</s>",
                   html = TRUE)
-doc_add_paragraph(doc, "First paragraph\n\nSecond paragraph")
+doc_add_paragraph(doc, "First paragraph\rSecond paragraph\nwith a line break")
 
 # Next to an existing text
 doc_add_paragraph(doc, "Inserted after the title", at_text = "Annual report")

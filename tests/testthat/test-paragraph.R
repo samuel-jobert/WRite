@@ -1,14 +1,14 @@
-test_that("doc_add_paragraph: \\n\\n creates paragraphs, \\n a line break", {
-  doc <- doc_new() |> doc_add_paragraph("A\nB\n\nC")
+test_that("doc_add_paragraph: \\r creates paragraphs, \\n a line break", {
+  doc <- doc_new() |> doc_add_paragraph("A\nB\n\nC\rD\r\nE")
   p <- .find_all(.xml(doc, doc$main), "//w:body/w:p")
   expect_length(p, 2)
-  expect_equal(.count(p[[1]], "count(.//w:br)"), 1)
-  expect_equal(doc_text(doc), c("A\nB", "C"))
+  expect_equal(.count(p[[1]], "count(.//w:br)"), 3)
+  expect_equal(doc_text(doc), c("A\nB\n\nC", "D\nE"))
 })
 
 test_that("doc_add_paragraph: a bookmark spans all the paragraphs", {
-  doc <- doc_new() |> doc_add_paragraph("A\n\nB", bookmark = "bk", style = "Heading1")
-  expect_equal(bkm_text(round_trip(doc), "bk"), "A\nB")
+  doc <- doc_new() |> doc_add_paragraph("A\rB", bookmark = "bk", style = "Heading1")
+  expect_equal(bkm_text(round_trip(doc), "bk"), "A\rB")
   p <- .find_all(.xml(doc, doc$main), "//w:body/w:p")
   expect_equal(.count(p[[2]], "count(w:pPr/w:pStyle[@w:val='Heading1'])"), 1)
 })
@@ -45,7 +45,7 @@ test_that("doc_add_paragraph: HTML formatting combines with the base format", {
 test_that("doc_add_paragraph with at_text: after, before", {
   doc <- doc_new() |> doc_add_paragraph("One") |> doc_add_paragraph("Two") |> doc_add_paragraph("Three")
   doc_add_paragraph(doc, "After one", at_text = "One")
-  doc_add_paragraph(doc, "Before three\n\nBefore three bis", at_text = "Three", where = "before")
+  doc_add_paragraph(doc, "Before three\rBefore three bis", at_text = "Three", where = "before")
   expect_equal(doc_text(doc), c("One", "After one", "Two", "Before three", "Before three bis", "Three"))
 })
 
@@ -81,9 +81,9 @@ test_that("doc_add_paragraph with at_text and replace: whole paragraph", {
 
 test_that("doc_add_paragraph with at_text and replace: paragraph split around the text", {
   doc <- doc_new() |> doc_add_paragraph("Before [X] after")
-  doc_add_paragraph(doc, "New 1\n\nNew 2", at_text = "[X]", where = "replace", bookmark = "nb")
+  doc_add_paragraph(doc, "New 1\rNew 2", at_text = "[X]", where = "replace", bookmark = "nb")
   expect_equal(doc_text(doc), c("Before ", "New 1", "New 2", " after"))
-  expect_equal(bkm_text(round_trip(doc), "nb"), "New 1\nNew 2")
+  expect_equal(bkm_text(round_trip(doc), "nb"), "New 1\rNew 2")
   expect_false(any(grepl("_WRite", bkm_list(doc)$name)))
 })
 

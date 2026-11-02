@@ -13,7 +13,9 @@
 #'
 #' @param doc WRite document object.
 #' @param values Named list (or one-row `data.frame`) of values. Values are
-#'   converted to text with `as.character()`; `NA` becomes `""`.
+#'   converted to text with `as.character()`; `NA` becomes `""`. `"\n"`, `"\r"`,
+#'   `"\t"` and `"\f"` give a line break, a new paragraph, a tab and a page
+#'   break, in the bookmarks as in the tags (see the "Special characters" section).
 #' @param tags Opening and closing tag delimiters, or `NULL` to not process
 #'   tags.
 #' @param bookmarks Also fill the bookmarks with these names?
@@ -21,6 +23,7 @@
 #' @return `doc`, invisibly. The `"fill_report"` attribute contains a
 #'   `data.frame` (`name`, `bookmark`: bookmark filled or not, `tags`: number of
 #'   tags replaced).
+#' @inheritSection doc_add_paragraph Special characters
 #' @section Illustration:
 #' ```
 #' Template: Dear {{name}},
@@ -93,7 +96,7 @@ doc_fill <- function(doc, values, tags = c("{{", "}}"), bookmarks = TRUE, warn =
   }
   # All the tags in a single pass over the document.
   if (!is.null(tags) && length(values) > 0) {
-    report$tags <- .replace_everywhere(doc, paste0(tags[1], names(values), tags[2]), unname(texts))
+    report$tags <- .replace_rich(doc, paste0(tags[1], names(values), tags[2]), unname(texts))
   }
   report
 }
@@ -178,7 +181,8 @@ bkm_conditional <- function(doc, name, condition, keep_bookmark = TRUE) {
 #'
 #' @param doc WRite document object.
 #' @param name Name of the bookmark delimiting the template.
-#' @param data `data.frame`: one copy of the template per row.
+#' @param data `data.frame`: one copy of the template per row. The special
+#'   characters of the values are interpreted (see [doc_add_paragraph()]).
 #' @param tags Opening and closing tag delimiters.
 #' @param keep_bookmark Keep the bookmark around the copies?
 #' @return `doc`, invisibly.
@@ -241,6 +245,8 @@ bkm_repeat <- function(doc, name, data, tags = c("{{", "}}"), keep_bookmark = TR
     return(invisible(doc))
   }
   columns <- names(data)
+  store <- new.env()
+  store$.html <- FALSE
   ref <- template[[length(template)]]
   for (k in seq_len(n)) {
     copies <- list()
@@ -261,12 +267,13 @@ bkm_repeat <- function(doc, name, data, tags = c("{{", "}}"), keep_bookmark = TR
       for (p in .find_all(cp, "descendant-or-self::w:p")) {
         for (col in columns) {
           tag <- paste0(tags[1], col, tags[2])
-          .replace_in_paragraph(p, tag, NULL, .value_text(data[[col]][k]), FALSE)
+          .replace_in_paragraph(p, tag, NULL, .value_text(data[[col]][k]), FALSE, store = store)
         }
       }
     }
   }
   for (el in template) xml2::xml_remove(el)
+  .apply_tokens(doc, store)
   for (m in list(bkm$start, bkm$end)) {
     if (!isTRUE(keep_bookmark) && .attached(m)) xml2::xml_remove(m)
   }

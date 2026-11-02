@@ -14,16 +14,19 @@
 #'
 #' @param doc WRite document object.
 #' @param text Text(s) to search for (or regular expression(s) if `regex = TRUE`).
-#' @param replacement Replacement text. With `regex = TRUE`, it may contain
+#' @param replacement Replacement text (`"\n"` = line break, `"\r"` = new
+#'   paragraph, `"\t"` = tab, `"\f"` = page break; see the "Special characters"
+#'   section). With `regex = TRUE`, it may contain
 #'   references `\\1`, `\\2`... Length 1 (same replacement for all the texts) or
 #'   the length of `text`.
 #' @param regex Is `text` a regular expression (PCRE syntax)?
 #' @param ignore_case Ignore the difference between upper and lower case?
 #' @param html Interpret the HTML tags of the replacement (`<b>`, `<i>`, `<u>`,
-#'   `<s>`, `<br>`...)? See [doc_add_paragraph()]. The formatting of the tags
+#'   `<s>`, `<br>`, `<p>`...)? See [doc_add_paragraph()]. The formatting of the tags
 #'   is added to the formatting of the replaced text.
 #' @return `doc`, invisibly. The number of replacements is available in the
 #'   `"replacements"` attribute of the returned value.
+#' @inheritSection doc_add_paragraph Special characters
 #' @section Illustration:
 #' ```
 #' Before: The contract of {{client}} starts on **{{da**te}}.   (tag spread over 2 runs)
@@ -67,21 +70,34 @@ doc_replace_text <- function(doc, text, replacement, regex = FALSE, ignore_case 
     stop("`replacement` must be a string or a vector of the same length as `text`.", call. = FALSE)
   }
   .check_flag(html, "html")
-  store <- if (html) new.env() else NULL
-  n <- sum(.replace_everywhere(doc, text, replacement, regex, ignore_case, store))
-  if (html) .apply_html(doc, store)
+  n <- sum(.replace_rich(doc, text, replacement, regex, ignore_case, html))
   attr(doc, "replacements") <- n
   invisible(doc)
 }
 
-# Replaces each temporary token by the runs of the HTML replacement.
-.apply_html <- function(doc, store) {
+# Replacement interpreting the special characters (and HTML tags if `html`): the
+# replacements that need runs or paragraphs go through a temporary token.
+# Returns the number of replacements for each element of `text`.
+.replace_rich <- function(doc, text, replacement, regex = FALSE, ignore_case = FALSE,
+                          html = FALSE) {
+  store <- new.env()
+  store$.html <- html
+  n <- .replace_everywhere(doc, text, replacement, regex, ignore_case, store)
+  .apply_tokens(doc, store)
+  n
+}
+
+# Does a replacement need runs (special characters, or HTML tags if `html`)?
+.needs_runs <- function(x, html) html || grepl("[\r\n\t\f\v]", x)
+
+# Replaces each temporary token by the runs (and paragraphs) of its replacement.
+.apply_tokens <- function(doc, store) {
   tokens <- sort(ls(store))
   for (token in tokens) {
     repl <- get(token, envir = store)
     .token_to_bookmark(doc, token, "_WRite_html_tmp", callback = function(start, end, rpr) {
-      runs <- .new_runs(repl, .format(), html = TRUE, anchor = start, where = "after")
-      for (r in runs) .merge_rpr(r, rpr)
+      ins <- .insert_runs(start, "after", repl, .format(), html = store$.html)
+      for (r in ins$runs) .merge_rpr(r, rpr)
       xml2::xml_remove(start)
       xml2::xml_remove(end)
     })
@@ -159,7 +175,7 @@ doc_replace_text <- function(doc, text, replacement, regex = FALSE, ignore_case 
     repl <- if (is.null(pattern)) replacement else {
       sub(pattern, replacement, substr(full, s, e), perl = TRUE, ignore.case = ignore_case)
     }
-    if (!is.null(store)) {
+    if (!is.null(store) && .needs_runs(repl, isTRUE(store$.html))) {
       token <- sprintf("\ue000WRite-html%d\ue000", length(ls(store)) + 1L)
       assign(token, repl, envir = store)
       repl <- token

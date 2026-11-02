@@ -51,7 +51,7 @@ test_that("bkm_insert_docx splits a paragraph containing text", {
 test_that("position = 'after' keeps the bookmark content", {
   doc <- doc_read(word_path("example.docx")) |>
     bkm_insert_docx("my_bookmark", word_path("to_insert.docx"), position = "after")
-  expect_match(bkm_text(doc, "my_bookmark"), "^Middle\nDocument to insert")
+  expect_match(bkm_text(doc, "my_bookmark"), "^Middle\rDocument to insert")
 })
 
 test_that("bkm_insert_doc inserts a document object without modifying it", {

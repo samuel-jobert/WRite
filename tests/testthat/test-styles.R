@@ -60,3 +60,56 @@ test_that("doc_add_style: errors and overwrite", {
   p <- .part_by_type(doc, doc$main, "styles")
   expect_equal(.attr(.find1(.xml(doc, p), "//w:style[@w:styleId='Sub']/w:basedOn"), "w:val"), "Heading1")
 })
+
+test_that("doc_add_style: bullets defined in the numbering part of the document", {
+  doc <- doc_new() |>
+    doc_add_style("List", bullet = "disc", size = 10) |>
+    doc_add_style("Arrows", bullet = "\u2192", bullet_font = "Segoe UI Symbol", bullet_indent = 0, bullet_spacing = 0.5)
+  pn <- .part_by_type(doc, doc$main, "numbering")
+  expect_false(is.na(pn))
+  xn <- .xml(doc, pn)
+  expect_equal(.count(xn, "count(/w:numbering/w:abstractNum)"), 2)
+  expect_equal(vapply(xml2::xml_children(xml2::xml_root(xn)), .name, ""),
+               c("w:abstractNum", "w:abstractNum", "w:num", "w:num"))
+  ps <- .xml(doc, .part_by_type(doc, doc$main, "styles"))
+  num_of <- function(id) .attr(.find1(ps, sprintf("//w:style[@w:styleId='%s']/w:pPr/w:numPr/w:numId", id)), "w:val")
+  lvl_of <- function(num) {
+    abs <- .attr(.find1(xn, sprintf("/w:numbering/w:num[@w:numId='%s']/w:abstractNumId", num)), "w:val")
+    .find1(xn, sprintf("/w:numbering/w:abstractNum[@w:abstractNumId='%s']/w:lvl", abs))
+  }
+  l1 <- lvl_of(num_of("List"))
+  expect_equal(.attr(.find1(l1, "w:numFmt"), "w:val"), "bullet")
+  expect_equal(.attr(.find1(l1, "w:lvlText"), "w:val"), "\uf0b7")
+  expect_equal(.attr(.find1(l1, "w:rPr/w:rFonts"), "w:ascii"), "Symbol")
+  expect_equal(c(.attr(.find1(l1, "w:pPr/w:ind"), "w:left"), .attr(.find1(l1, "w:pPr/w:ind"), "w:hanging")), c("714", "357"))
+  l2 <- lvl_of(num_of("Arrows"))
+  expect_equal(.attr(.find1(l2, "w:lvlText"), "w:val"), "\u2192")
+  expect_equal(.attr(.find1(l2, "w:rPr/w:rFonts"), "w:ascii"), "Segoe UI Symbol")
+  # Same indentation in the style, and schema order of w:pPr
+  s2 <- .find1(ps, "//w:style[@w:styleId='Arrows']")
+  expect_equal(c(.attr(.find1(s2, "w:pPr/w:ind"), "w:left"), .attr(.find1(s2, "w:pPr/w:ind"), "w:hanging")), c("284", "284"))
+  expect_equal(vapply(xml2::xml_children(.find1(s2, "w:pPr")), .name, ""), c("w:numPr", "w:ind"))
+  # Usable, saved, and kept when inserted into another document
+  doc_add_paragraph(doc, "One\rTwo", style = "List")
+  d2 <- round_trip(doc)
+  expect_equal(.part_by_type(d2, d2$main, "numbering"), pn)
+  target <- doc_new() |> doc_add_paragraph("", bookmark = "here")
+  bkm_insert_doc(target, "here", d2)
+  pt <- .part_by_type(target, target$main, "numbering")
+  expect_false(is.na(pt))
+  num_t <- .attr(.find1(.xml(target, .part_by_type(target, target$main, "styles")), "//w:style[@w:styleId='List']/w:pPr/w:numPr/w:numId"), "w:val")
+  expect_equal(.attr(.find1(.xml(target, pt), sprintf("/w:numbering/w:num[@w:numId='%s']", num_t)), "w:numId"), num_t)
+})
+
+test_that("doc_add_style: bullet errors", {
+  doc <- doc_new()
+  expect_error(doc_add_style(doc, "B", bullet = "disc", indent_left = 1), "bullet_indent")
+  expect_error(doc_add_style(doc, "B", bullet = "disc", type = "character"), "character style")
+  expect_error(doc_add_style(doc, "B", bullet_indent = 1), "require `bullet`")
+  expect_error(doc_add_style(doc, "B", bullet = ""), "bullet")
+  expect_error(doc_add_style(doc, "B", bullet = "disc", bullet_spacing = -1), "bullet_spacing")
+  doc_add_style(doc, "Dash", bullet = "dash")
+  lvl <- .find1(.xml(doc, .part_by_type(doc, doc$main, "numbering")), "//w:lvl")
+  expect_equal(.attr(.find1(lvl, "w:lvlText"), "w:val"), "\u2013")
+  expect_equal(.count(lvl, "count(w:rPr)"), 0)
+})

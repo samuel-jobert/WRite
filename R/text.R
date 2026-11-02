@@ -47,21 +47,21 @@
   invisible(rpr)
 }
 
-# Fills the run `r` with the text (\n -> line break, \t -> tab).
+# Fills the run `r` with the text of a paragraph (\n or \v -> line break,
+# \t -> tab, \f -> page break).
 .fill_text <- function(r, text) {
-  text <- gsub("\r\n?", "\n", paste(text, collapse = "\n"))
-  lines <- strsplit(text, "\n", fixed = TRUE)[[1]]
-  if (endsWith(text, "\n")) lines <- c(lines, "")
-  for (i in seq_along(lines)) {
-    if (i > 1) .add(r, "w:br")
-    segs <- strsplit(lines[i], "\t", fixed = TRUE)[[1]]
-    if (endsWith(lines[i], "\t")) segs <- c(segs, "")
-    for (j in seq_along(segs)) {
-      if (j > 1) .add(r, "w:tab")
-      if (nzchar(segs[j])) {
-        t <- .add(r, "w:t", "xml:space" = "preserve")
-        xml2::xml_text(t) <- segs[j]
-      }
+  text <- gsub("\v", "\n", paste(text, collapse = "\n"), fixed = TRUE)
+  tokens <- regmatches(text, gregexpr("[\n\t\f]|[^\n\t\f]+", text, perl = TRUE))[[1]]
+  for (tk in tokens) {
+    if (tk == "\n") {
+      .add(r, "w:br")
+    } else if (tk == "\t") {
+      .add(r, "w:tab")
+    } else if (tk == "\f") {
+      .add(r, "w:br", "w:type" = "page")
+    } else {
+      t <- .add(r, "w:t", "xml:space" = "preserve")
+      xml2::xml_text(t) <- tk
     }
   }
   invisible(r)
@@ -118,10 +118,34 @@
   segs
 }
 
-# Creates the runs of a text (one per formatting segment); returns the list of runs.
-.new_runs <- function(text, f, html = FALSE, anchor = NULL, where = "after", parent = NULL) {
-  runs <- list()
+# Splits a text into paragraphs ("\r"; with `html`, also <p>...</p>) of formatted
+# segments: list (one element per paragraph) of lists of list(text, f). A Windows
+# line end "\r\n" is a line break. An empty paragraph has one empty segment.
+.paragraph_segments <- function(text, f, html = FALSE) {
+  text <- gsub("\r\n", "\n", paste(text, collapse = "\n"), fixed = TRUE)
+  if (html) {
+    text <- gsub("(?i)</p>\\s*<p\\b[^>]*>", "\r", text, perl = TRUE)
+    text <- gsub("(?i)</?p\\b[^>]*>", "", text, perl = TRUE)
+  }
+  pars <- list(list())
   for (s in .rich_segments(text, f, html)) {
+    pieces <- strsplit(s$text, "\r", fixed = TRUE)[[1]]
+    if (endsWith(s$text, "\r")) pieces <- c(pieces, "")
+    for (j in seq_along(pieces)) {
+      if (j > 1) pars[[length(pars) + 1]] <- list()
+      if (nzchar(pieces[j])) {
+        k <- length(pars)
+        pars[[k]][[length(pars[[k]]) + 1]] <- list(text = pieces[j], f = s$f)
+      }
+    }
+  }
+  lapply(pars, function(p) if (length(p) == 0) list(list(text = "", f = f)) else p)
+}
+
+# Creates the runs of the segments of a paragraph; returns the list of runs.
+.segment_runs <- function(segs, anchor = NULL, where = "after", parent = NULL) {
+  runs <- list()
+  for (s in segs) {
     r <- .new_run(s$text, s$f, anchor = anchor, where = where, parent = parent)
     runs[[length(runs) + 1]] <- r
     if (is.null(parent) && where == "after") anchor <- r
@@ -319,8 +343,8 @@ doc_add_page_break <- function(doc) {
 #' prepare a document created by [doc_new()]).
 #'
 #' @param doc WRite document object.
-#' @param text Paragraph text. `"\n"` = line break, `"\n\n"` = new paragraph,
-#'   `"\t"` = tab.
+#' @param text Paragraph text: `"\n"` = line break, `"\r"` = new paragraph,
+#'   `"\t"` = tab, `"\f"` = page break (see the "Special characters" section).
 #' @param bold,italic `TRUE`/`FALSE` (`NULL` = inherited from the style).
 #' @param underline `TRUE`, `FALSE` or Word underline type (`"double"`, `"dotted"`...).
 #' @param size Font size in points.
@@ -335,9 +359,9 @@ doc_add_page_break <- function(doc) {
 #' @param keep_lines_together Keep all the lines of the paragraph on the same
 #'   page (Word "Keep lines together" option).
 #' @param html Interpret HTML tags in `text`? Supported: `<b>`/`<strong>`,
-#'   `<i>`/`<em>`, `<u>`, `<s>`/`<strike>`/`<del>` (can be nested) and `<br>`
-#'   (line break). Other tags are kept as text; `&lt;`, `&gt;`, `&amp;` and
-#'   `&nbsp;` are decoded.
+#'   `<i>`/`<em>`, `<u>`, `<s>`/`<strike>`/`<del>` (can be nested), `<br>`
+#'   (line break) and `<p>...</p>` (paragraphs). Other tags are kept as text;
+#'   `&lt;`, `&gt;`, `&amp;` and `&nbsp;` are decoded.
 #' @param at_text Text of the document next to which the paragraph is inserted
 #'   (`NULL` = end of the document). The search covers the body, headers,
 #'   footers and notes, and is literal and case-sensitive. If the text is not
@@ -351,6 +375,26 @@ doc_add_page_break <- function(doc) {
 #'   with `where` = `"before"`/`"after"`, once per paragraph containing the text).
 #'   `"all"` cannot be combined with `bookmark`.
 #' @return `doc`, invisibly.
+#' @section Special characters:
+#' All the functions that insert or replace text ([doc_add_paragraph()],
+#' [bkm_insert_text()], [bkm_replace_text()], [doc_replace_text()],
+#' [doc_fill()], [bkm_repeat()], [doc_mail_merge()]) interpret the texts in
+#' the same way:
+#' * `"\n"` (or `"\v"`): line break within the paragraph (Shift+Enter in
+#'   Word); `"\n\n"` gives two line breaks;
+#' * `"\r"`: new paragraph, with the properties (style, indentation,
+#'   alignment...) of the paragraph where the text is inserted;
+#' * `"\t"`: tab; `"\f"`: page break;
+#' * `"\r\n"` (Windows line end, for example a text typed in a form) is a
+#'   line break, not a new paragraph.
+#'
+#' With `html = TRUE`, `<br>` is a line break and `<p>...</p>` delimit
+#' paragraphs.
+#'
+#' Only these control characters are interpreted: the two characters
+#' backslash and `n` (written `"\\n"` in R) stay as they are in the text.
+#' [bkm_text()] and [bkm_list()] return the texts with the same conventions
+#' (paragraphs separated by `"\r"`).
 #' @section Illustration:
 #' ```
 #' doc_new() |>
@@ -381,7 +425,7 @@ doc_add_page_break <- function(doc) {
 #' # Rich text (HTML tags) and several paragraphs
 #' doc_add_paragraph(doc, "Normal, <b>bold</b>, <i>italic</i> and <s>struck</s>",
 #'                   html = TRUE)
-#' doc_add_paragraph(doc, "First paragraph\n\nSecond paragraph")
+#' doc_add_paragraph(doc, "First paragraph\rSecond paragraph\nwith a line break")
 #'
 #' # Next to an existing text
 #' doc_add_paragraph(doc, "Inserted after the title", at_text = "Annual report")
@@ -415,8 +459,8 @@ doc_add_paragraph <- function(doc, text = "", bold = NULL, italic = NULL, underl
   if (!is.null(bookmark) && !is.null(at_text) && occurrence == "all") {
     stop("`bookmark` cannot be used with `occurrence = \"all\"`.", call. = FALSE)
   }
-  pieces <- .paragraph_pieces(text)
-  build <- function() .build_paragraphs(doc, pieces, f, st, html, bookmark)
+  pieces <- .paragraph_segments(text, f, html)
+  build <- function() .build_paragraphs(doc, pieces, st, bookmark)
   finish <- function(ps) {
     if (keep_lines_together) for (p in ps) .enable_property(p, "w:keepLines")
     .set_keep_options(ps[[1]], keep_with_previous, FALSE)
@@ -429,22 +473,16 @@ doc_add_paragraph <- function(doc, text = "", bold = NULL, italic = NULL, underl
   invisible(doc)
 }
 
-# Paragraph texts: "\n\n" separates paragraphs.
-.paragraph_pieces <- function(text) {
-  text <- gsub("\r\n?", "\n", paste(text, collapse = "\n"))
-  if (!nzchar(text)) return("")
-  strsplit(text, "\n\n", fixed = TRUE)[[1]]
-}
-
-# Creates the paragraphs at the end of the body; the bookmark spans all of them.
-.build_paragraphs <- function(doc, pieces, f, st, html, bookmark) {
+# Creates the paragraphs (from .paragraph_segments()) at the end of the body;
+# the bookmark spans all of them.
+.build_paragraphs <- function(doc, pieces, st, bookmark) {
   id <- if (!is.null(bookmark)) .bookmark_max_id(doc) + 1
   n <- length(pieces)
   lapply(seq_len(n), function(i) {
     p <- .new_final_paragraph(doc)
     if (!is.null(st) && st$type == "paragraph") .set_paragraph_style(p, st$id)
     if (i == 1 && !is.null(bookmark)) .add(p, "w:bookmarkStart", "w:id" = id, "w:name" = bookmark)
-    if (nzchar(pieces[i])) .new_runs(pieces[i], f, html, parent = p)
+    .segment_runs(Filter(function(s) nzchar(s$text), pieces[[i]]), parent = p)
     if (i == n && !is.null(bookmark)) .add(p, "w:bookmarkEnd", "w:id" = id)
     p
   })

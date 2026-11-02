@@ -11,7 +11,8 @@ bkm_repeat(doc, name, data, tags = c("{{", "}}"), keep_bookmark = TRUE)
 
 \item{name}{Name of the bookmark delimiting the template.}
 
-\item{data}{\code{data.frame}: one copy of the template per row.}
+\item{data}{\code{data.frame}: one copy of the template per row. The special
+characters of the values are interpreted (see \code{\link[=doc_add_paragraph]{doc_add_paragraph()}}).}
 
 \item{tags}{Opening and closing tag delimiters.}
 

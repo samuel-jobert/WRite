@@ -520,13 +520,7 @@ bkm_insert_doc <- function(doc, name, source, position = c("replace", "before", 
   p_src <- .part_by_type(source, source$main, "numbering")
   if (is.na(p_src)) return(invisible())
   x_src <- .xml(source, p_src)
-  p_dst <- .part_by_type(doc, doc$main, "numbering")
-  if (is.na(p_dst)) {
-    p_dst <- .free_path(doc, "word/numbering.xml")
-    .xml_set(doc, p_dst, xml2::read_xml(sprintf('<w:numbering xmlns:w="%s"/>', .ns[["w"]])))
-    .add_rel(doc, doc$main, .rel_type("numbering"), .relative_path(doc$main, p_dst))
-    .ct_add_override(doc, p_dst, .ct[["numbering"]])
-  }
+  p_dst <- .numbering_part(doc)
   x_dst <- .xml(doc, p_dst)
   .merge_root_ns(x_dst, x_src)
   root <- xml2::xml_root(x_dst)

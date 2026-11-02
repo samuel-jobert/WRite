@@ -97,7 +97,7 @@
   res
 }
 
-# Text contained in a list of elements (paragraphs separated by "\n").
+# Text contained in a list of elements (paragraphs separated by "\r").
 .nodes_text <- function(nodes) {
   pieces <- character()
   prev_p <- NULL
@@ -107,7 +107,7 @@
       "descendant-or-self::w:br[parent::w:r]", "descendant-or-self::w:cr[parent::w:r]", sep = " | "))
     for (e in els) {
       p <- .paragraph_of(e)
-      if (!is.null(prev_p) && !is.null(p) && !identical(p, prev_p)) pieces <- c(pieces, "\n")
+      if (!is.null(prev_p) && !is.null(p) && !identical(p, prev_p)) pieces <- c(pieces, "\r")
       prev_p <- p
       nm <- .name(e)
       pieces <- c(pieces, switch(nm, "w:t" = xml2::xml_text(e), "w:tab" = "\t",
@@ -238,7 +238,8 @@
 #'
 #' @param doc WRite document object.
 #' @return A `data.frame` with columns `name`, `id`, `part` (XML part
-#'   containing the bookmark: body, header, footer, notes) and `text`.
+#'   containing the bookmark: body, header, footer, notes) and `text`
+#'   (same conventions as [bkm_text()]).
 #' @examples
 #' doc <- doc_read(write_example("example"))
 #' bkm_list(doc)
@@ -274,7 +275,10 @@ bkm_list <- function(doc) {
 #'
 #' @param doc WRite document object.
 #' @param name Bookmark name.
-#' @return A string (paragraphs separated by `"\n"`, page break = `"\f"`).
+#' @return A string: paragraphs separated by `"\r"`, line break = `"\n"`,
+#'   tab = `"\t"`, page break = `"\f"` (the conventions of the insertion
+#'   functions, see [doc_add_paragraph()]: the text can be given back to
+#'   [bkm_replace_text()]).
 #' @examples
 #' doc <- doc_read(write_example("example"))
 #' bkm_text(doc, "my_bookmark")            # "Middle"
@@ -282,7 +286,7 @@ bkm_list <- function(doc) {
 #'
 #' # A bookmark spanning several paragraphs
 #' bkm_insert_docx(doc, "empty_bookmark", write_example("to_insert"))
-#' cat(bkm_text(doc, "empty_bookmark"))
+#' strsplit(bkm_text(doc, "empty_bookmark"), "\r")[[1]]   # one element per paragraph
 #' @export
 bkm_text <- function(doc, name) {
   .check_doc(doc)
@@ -521,17 +525,19 @@ bkm_delete <- function(doc, name = NULL, delete_content = TRUE, delete_bookmark 
 #'
 #' @param doc WRite document object.
 #' @param name Bookmark name, or vector of bookmark names.
-#' @param text New text (`"\n"` = line break, `"\t"` = tab). With several names:
+#' @param text New text (`"\n"` = line break, `"\r"` = new paragraph, `"\t"` = tab,
+#'   `"\f"` = page break; see the "Special characters" section). With several names:
 #'   one text for all the bookmarks, or a vector of the same length as `name`.
 #'   With a single name, a vector of texts is joined with line breaks.
 #' @param keep_bookmark Keep the bookmark around the new text?
 #' @param html Interpret the HTML tags of `text` (`<b>`, `<i>`, `<u>`, `<s>`,
-#'   `<br>`...)? See [doc_add_paragraph()]. The formatting of the tags is
+#'   `<br>`, `<p>`...)? See [doc_add_paragraph()]. The formatting of the tags is
 #'   added to the kept formatting.
 #' @param style Style of the document (identifier or name, see
 #'   [doc_add_style()]). A character style is applied to the new text; a
-#'   paragraph style to the paragraph containing it.
+#'   paragraph style to the paragraph(s) containing it.
 #' @return `doc`, invisibly.
+#' @inheritSection doc_add_paragraph Special characters
 #' @section Illustration:
 #' ```
 #' Before : Amount: [amount: **0**] euros
@@ -620,29 +626,51 @@ bkm_replace_text <- function(doc, name, text, keep_bookmark = TRUE, html = FALSE
   f <- .format(char_style = if (!is.null(st) && st$type == "character") st$id)
   ins <- .insert_runs(bkm$start, "after", text, f, html)
   if (!is.null(rpr)) for (r in ins$runs) .merge_rpr(r, rpr)
-  if (!is.null(st) && st$type == "paragraph") .set_paragraph_style(ins$p, st$id)
+  if (!is.null(st) && st$type == "paragraph") for (p in ins$ps) .set_paragraph_style(p, st$id)
   if (!isTRUE(keep_bookmark)) .remove_markers(bkm)
   invisible(bkm)
 }
 
-# Inserts a run next to a marker; creates a paragraph if the marker is
-# outside a paragraph. Returns list(p = paragraph, r = run).
+# Inserts the runs of `text` next to a marker (see .paragraph_segments()); creates
+# a paragraph if the marker is outside a paragraph. Each "\r" splits the paragraph:
+# the new paragraphs take its properties, and what followed the insertion point
+# goes at the end of the last one.
+# Returns list(p = first paragraph, ps = all the paragraphs, r = first run, runs).
 .insert_runs <- function(anchor, where, text, f, html = FALSE) {
+  pars <- .paragraph_segments(text, f, html)
   p <- .paragraph_of(anchor)
   if (is.null(p)) {
     p <- .add(anchor, "w:p", sibling = where)
-    runs <- .new_runs(text, f, html, parent = p)
+    runs <- .segment_runs(pars[[1]], parent = p)
   } else {
-    runs <- .new_runs(text, f, html, anchor = anchor, where = where)
+    if (length(pars) > 1 && !identical(xml2::xml_parent(anchor), p)) {
+      stop("The bookmark is placed in a structure (hyperlink, field...) where a new paragraph cannot be created.", call. = FALSE)
+    }
+    runs <- .segment_runs(pars[[1]], anchor = anchor, where = where)
   }
-  list(p = p, r = runs[[1]], runs = runs)
+  ps <- list(p)
+  if (length(pars) > 1) {
+    tail <- as.list(xml2::xml_find_all(runs[[length(runs)]], "following-sibling::*"))
+    ppr <- .find1(p, "w:pPr")
+    for (k in 2:length(pars)) {
+      q <- .add(ps[[k - 1]], "w:p", sibling = "after")
+      if (!.is_missing(ppr)) xml2::xml_add_child(q, ppr)
+      runs <- c(runs, .segment_runs(pars[[k]], parent = q))
+      ps[[k]] <- q
+    }
+    for (n in tail) .move(n, ps[[length(ps)]], "child")
+    # A section break stays with the last paragraph.
+    for (q in ps[-length(ps)]) xml2::xml_remove(.find_all(q, "w:pPr/w:sectPr"))
+  }
+  list(p = p, ps = ps, r = runs[[1]], runs = runs)
 }
 
 #' Insert formatted text on a bookmark
 #'
 #' @param doc WRite document object.
 #' @param name Bookmark name.
-#' @param text Text to insert (`"\n"` = line break, `"\t"` = tab).
+#' @param text Text to insert (`"\n"` = line break, `"\r"` = new paragraph,
+#'   `"\t"` = tab, `"\f"` = page break; see the "Special characters" section).
 #' @param position `"replace"` (replaces the content of the bookmark),
 #'   `"before"` (at the start of the bookmark, before its content) or
 #'   `"after"` (at the end of the bookmark, after its content). The inserted
@@ -661,9 +689,10 @@ bkm_replace_text <- function(doc, name, text, keep_bookmark = TRUE, html = FALSE
 #' @param keep_lines_together Keep all the lines of the paragraph containing
 #'   the inserted text on the same page ("Keep lines together").
 #' @param html Interpret the HTML tags of `text` (`<b>`/`<strong>`,
-#'   `<i>`/`<em>`, `<u>`, `<s>`/`<strike>`/`<del>`, `<br>`)? See
+#'   `<i>`/`<em>`, `<u>`, `<s>`/`<strike>`/`<del>`, `<br>`, `<p>`)? See
 #'   [doc_add_paragraph()].
 #' @return `doc`, invisibly.
+#' @inheritSection doc_add_paragraph Special characters
 #' @section Illustration:
 #' ```
 #' Before                  : Total: [total: 100] euros
@@ -713,8 +742,9 @@ bkm_insert_text <- function(doc, name, text, position = c("replace", "before", "
   bkm <- .bkm_find(doc, name)
   if (position == "replace") .empty_range(bkm)
   ins <- if (position == "after") .insert_runs(bkm$end, "before", text, f, html) else .insert_runs(bkm$start, "after", text, f, html)
-  if (!is.null(st) && st$type == "paragraph") .set_paragraph_style(ins$p, st$id)
-  .set_keep_options(ins$p, keep_with_previous, keep_lines_together)
+  if (!is.null(st) && st$type == "paragraph") for (p in ins$ps) .set_paragraph_style(p, st$id)
+  .set_keep_options(ins$p, keep_with_previous, FALSE)
+  if (keep_lines_together) for (p in ins$ps) .enable_property(p, "w:keepLines")
   if (!isTRUE(keep_bookmark)) .remove_markers(bkm)
   }, NULL)
   invisible(doc)

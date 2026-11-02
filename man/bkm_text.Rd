@@ -12,7 +12,10 @@ bkm_text(doc, name)
 \item{name}{Bookmark name.}
 }
 \value{
-A string (paragraphs separated by \code{"\\n"}, page break = \code{"\\f"}).
+A string: paragraphs separated by \code{"\\r"}, line break = \code{"\\n"},
+tab = \code{"\\t"}, page break = \code{"\\f"} (the conventions of the insertion
+functions, see \code{\link[=doc_add_paragraph]{doc_add_paragraph()}}: the text can be given back to
+\code{\link[=bkm_replace_text]{bkm_replace_text()}}).
 }
 \description{
 Text contained in a bookmark
@@ -24,5 +27,5 @@ bkm_text(doc, "empty_bookmark")         # "": empty bookmark
 
 # A bookmark spanning several paragraphs
 bkm_insert_docx(doc, "empty_bookmark", write_example("to_insert"))
-cat(bkm_text(doc, "empty_bookmark"))
+strsplit(bkm_text(doc, "empty_bookmark"), "\r")[[1]]   # one element per paragraph
 }

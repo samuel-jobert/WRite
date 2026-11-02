@@ -82,7 +82,7 @@ reassignment. To work on an independent copy, use `doc_copy()`.
 | `doc_text(doc, keep_empty = FALSE)` | Text of each paragraph (quick check of a result). |
 | `write_example(name)` | Path of an example document shipped with the package. |
 | `doc_save(doc, path)` | Writes the document (an existing file is overwritten). |
-| `doc_add_style(doc, name, font, size, bold, italic, underline, strike, color, align, spacing_before, spacing_after, line_spacing, indent_left, indent_right, indent_first_line, keep_with_next, keep_lines_together, type, based_on, overwrite)` | Creates a real Word style (units: points, cm, line spacing as a multiple), usable with `style = "name"` in `doc_add_paragraph()`, `bkm_insert_text()` and `bkm_replace_text()`. Word has no "keep with previous" in a style: use `keep_with_previous` of the insertion functions. |
+| `doc_add_style(doc, name, font, size, bold, italic, underline, strike, color, align, spacing_before, spacing_after, line_spacing, indent_left, indent_right, indent_first_line, keep_with_next, keep_lines_together, bullet, bullet_font, bullet_indent, bullet_spacing, type, based_on, overwrite)` | Creates a real Word style (units: points, cm, line spacing as a multiple), usable with `style = "name"` in `doc_add_paragraph()`, `bkm_insert_text()` and `bkm_replace_text()`. `bullet` makes a bulleted list style (`"disc"`, `"circle"`, `"square"`, `"dash"`, `"arrow"`, `"check"` or any character), with `bullet_indent` (position of the bullet) and `bullet_spacing` (distance to the text), in cm. Word has no "keep with previous" in a style: use `keep_with_previous` of the insertion functions. |
 | `doc_clean(doc, bookmark_ids = TRUE, merge_runs = TRUE, spelling = FALSE, comments = FALSE, revisions = FALSE, all = FALSE)` | Cleaning (see below). |
 | `doc_replace_text(doc, text, replacement, regex, ignore_case, html)` | Replaces one or several texts throughout the document (see below). |
 | `doc_replace_text_with_flextable(doc, text, ft)` | Replaces each occurrence of a text with a flextable. |
@@ -137,7 +137,25 @@ after the insertion.
   name (`"heading 1"`). A **character** style applies to the inserted text, a
   **paragraph** style to the paragraph that contains the text.
 
-In the text, `"\n"` produces a line break and `"\t"` a tab.
+#### Special characters in texts
+
+All the functions that insert or replace text (`doc_add_paragraph()`,
+`bkm_insert_text()`, `bkm_replace_text()`, `doc_replace_text()`, `doc_fill()`,
+`bkm_repeat()`, `doc_mail_merge()`) interpret the texts in the same way:
+
+| Character | Result |
+|---|---|
+| `"\n"` (or `"\v"`) | line break within the paragraph (Shift+Enter in Word); `"\n\n"` = two line breaks |
+| `"\r"` | new paragraph, with the properties (style, indentation, alignment...) of the paragraph where the text is inserted |
+| `"\t"` | tab |
+| `"\f"` | page break |
+| `"\r\n"` | line break (Windows line end, e.g. text typed in a form) |
+
+With `html = TRUE`, `<br>` is a line break and `<p>...</p>` delimit
+paragraphs. Only the control characters are interpreted: the two characters
+backslash and `n` (written `"\\n"` in R) stay as they are. `bkm_text()` and
+`bkm_list()` return texts with the same conventions (paragraphs separated by
+`"\r"`), so they can be given back to `bkm_replace_text()`.
 
 #### Chaining paragraphs
 
@@ -155,9 +173,10 @@ the bookmark.
 
 #### Rich text and position of `doc_add_paragraph()`
 
-* In `text`, `"\n"` is a line break and `"\n\n"` starts a new paragraph.
+* In `text`, `"\n"` is a line break and `"\r"` starts a new paragraph (see
+  "Special characters in texts" above).
 * `html = TRUE` interprets `<b>`/`<strong>`, `<i>`/`<em>`, `<u>`, `<s>`/`<strike>`/`<del>`
-  (nestable) and `<br>`; other tags are kept as text.
+  (nestable), `<br>` and `<p>`; other tags are kept as text.
 * `at_text = "..."` inserts next to a text of the document: `where = "after"`
   (default), `"before"` or `"replace"` (the paragraph replaces the text; the
   paragraph containing it is split if it has other text). If the text is absent,

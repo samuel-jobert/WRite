@@ -18,19 +18,20 @@ bkm_replace_text(
 
 \item{name}{Bookmark name, or vector of bookmark names.}
 
-\item{text}{New text (\code{"\\n"} = line break, \code{"\\t"} = tab). With several names:
+\item{text}{New text (\code{"\\n"} = line break, \code{"\\r"} = new paragraph, \code{"\\t"} = tab,
+\code{"\\f"} = page break; see the "Special characters" section). With several names:
 one text for all the bookmarks, or a vector of the same length as \code{name}.
 With a single name, a vector of texts is joined with line breaks.}
 
 \item{keep_bookmark}{Keep the bookmark around the new text?}
 
 \item{html}{Interpret the HTML tags of \code{text} (\verb{<b>}, \verb{<i>}, \verb{<u>}, \verb{<s>},
-\verb{<br>}...)? See \code{\link[=doc_add_paragraph]{doc_add_paragraph()}}. The formatting of the tags is
+\verb{<br>}, \verb{<p>}...)? See \code{\link[=doc_add_paragraph]{doc_add_paragraph()}}. The formatting of the tags is
 added to the kept formatting.}
 
 \item{style}{Style of the document (identifier or name, see
 \code{\link[=doc_add_style]{doc_add_style()}}). A character style is applied to the new text; a
-paragraph style to the paragraph containing it.}
+paragraph style to the paragraph(s) containing it.}
 }
 \value{
 \code{doc}, invisibly.
@@ -53,6 +54,31 @@ that is not found gives a warning and the others are still processed.
 After  : Amount: [amount: **1,500**] euros      (bold kept)
 keep_bookmark = FALSE : Amount: **1,500** euros
 }\if{html}{\out{</div>}}
+}
+
+\section{Special characters}{
+
+All the functions that insert or replace text (\code{\link[=doc_add_paragraph]{doc_add_paragraph()}},
+\code{\link[=bkm_insert_text]{bkm_insert_text()}}, \code{\link[=bkm_replace_text]{bkm_replace_text()}}, \code{\link[=doc_replace_text]{doc_replace_text()}},
+\code{\link[=doc_fill]{doc_fill()}}, \code{\link[=bkm_repeat]{bkm_repeat()}}, \code{\link[=doc_mail_merge]{doc_mail_merge()}}) interpret the texts in
+the same way:
+\itemize{
+\item \code{"\\n"} (or \code{"\\v"}): line break within the paragraph (Shift+Enter in
+Word); \code{"\\n\\n"} gives two line breaks;
+\item \code{"\\r"}: new paragraph, with the properties (style, indentation,
+alignment...) of the paragraph where the text is inserted;
+\item \code{"\\t"}: tab; \code{"\\f"}: page break;
+\item \code{"\\r\\n"} (Windows line end, for example a text typed in a form) is a
+line break, not a new paragraph.
+}
+
+With \code{html = TRUE}, \verb{<br>} is a line break and \verb{<p>...</p>} delimit
+paragraphs.
+
+Only these control characters are interpreted: the two characters
+backslash and \code{n} (written \code{"\\\\n"} in R) stay as they are in the text.
+\code{\link[=bkm_text]{bkm_text()}} and \code{\link[=bkm_list]{bkm_list()}} return the texts with the same conventions
+(paragraphs separated by \code{"\\r"}).
 }
 
 \examples{

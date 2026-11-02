@@ -18,7 +18,9 @@ doc_replace_text(
 
 \item{text}{Text(s) to search for (or regular expression(s) if \code{regex = TRUE}).}
 
-\item{replacement}{Replacement text. With \code{regex = TRUE}, it may contain
+\item{replacement}{Replacement text (\code{"\\n"} = line break, \code{"\\r"} = new
+paragraph, \code{"\\t"} = tab, \code{"\\f"} = page break; see the "Special characters"
+section). With \code{regex = TRUE}, it may contain
 references \verb{\\\\1}, \verb{\\\\2}... Length 1 (same replacement for all the texts) or
 the length of \code{text}.}
 
@@ -27,7 +29,7 @@ the length of \code{text}.}
 \item{ignore_case}{Ignore the difference between upper and lower case?}
 
 \item{html}{Interpret the HTML tags of the replacement (\verb{<b>}, \verb{<i>}, \verb{<u>},
-\verb{<s>}, \verb{<br>}...)? See \code{\link[=doc_add_paragraph]{doc_add_paragraph()}}. The formatting of the tags
+\verb{<s>}, \verb{<br>}, \verb{<p>}...)? See \code{\link[=doc_add_paragraph]{doc_add_paragraph()}}. The formatting of the tags
 is added to the formatting of the replaced text.}
 }
 \value{
@@ -56,6 +58,31 @@ doc_replace_text(doc, "\{\{client\}\}", "Mr Martin")
 doc_replace_text(doc, "\{\{date\}\}", "March 1st")
 After : The contract of Mr Martin starts on **March 1st**.
 }\if{html}{\out{</div>}}
+}
+
+\section{Special characters}{
+
+All the functions that insert or replace text (\code{\link[=doc_add_paragraph]{doc_add_paragraph()}},
+\code{\link[=bkm_insert_text]{bkm_insert_text()}}, \code{\link[=bkm_replace_text]{bkm_replace_text()}}, \code{\link[=doc_replace_text]{doc_replace_text()}},
+\code{\link[=doc_fill]{doc_fill()}}, \code{\link[=bkm_repeat]{bkm_repeat()}}, \code{\link[=doc_mail_merge]{doc_mail_merge()}}) interpret the texts in
+the same way:
+\itemize{
+\item \code{"\\n"} (or \code{"\\v"}): line break within the paragraph (Shift+Enter in
+Word); \code{"\\n\\n"} gives two line breaks;
+\item \code{"\\r"}: new paragraph, with the properties (style, indentation,
+alignment...) of the paragraph where the text is inserted;
+\item \code{"\\t"}: tab; \code{"\\f"}: page break;
+\item \code{"\\r\\n"} (Windows line end, for example a text typed in a form) is a
+line break, not a new paragraph.
+}
+
+With \code{html = TRUE}, \verb{<br>} is a line break and \verb{<p>...</p>} delimit
+paragraphs.
+
+Only these control characters are interpreted: the two characters
+backslash and \code{n} (written \code{"\\\\n"} in R) stay as they are in the text.
+\code{\link[=bkm_text]{bkm_text()}} and \code{\link[=bkm_list]{bkm_list()}} return the texts with the same conventions
+(paragraphs separated by \code{"\\r"}).
 }
 
 \examples{

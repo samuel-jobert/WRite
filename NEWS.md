@@ -11,7 +11,14 @@
 * Templates: `doc_fill()`, `bkm_conditional()`, `bkm_repeat()`,
   `doc_mail_merge()`.
 * Cleaning: `doc_clean()` (duplicate bookmark identifiers, merging of runs).
-* `doc_add_paragraph()`: `"\n\n"` creates several paragraphs, `html = TRUE`
+* Special characters, interpreted the same way by all the functions that insert
+  or replace text (`doc_add_paragraph()`, `bkm_insert_text()`,
+  `bkm_replace_text()`, `doc_replace_text()`, `doc_fill()`, `bkm_repeat()`,
+  `doc_mail_merge()`): `"\n"` = line break, `"\r"` = new paragraph (with the
+  properties of the current paragraph), `"\t"` = tab, `"\f"` = page break;
+  `"\r\n"` is a line break. With `html = TRUE`, `<p>...</p>` delimit paragraphs.
+  `bkm_text()` and `bkm_list()` separate paragraphs with `"\r"`.
+* `doc_add_paragraph()`: `html = TRUE`
   interprets basic HTML tags, and `at_text` / `where` / `occurrence` insert the
   paragraph before, after or in place of a text of the document.
 * `html = TRUE` is also available in `bkm_insert_text()`, `bkm_replace_text()` (the
@@ -26,6 +33,11 @@
 * `doc_add_style()`: creates a Word style (paragraph or character) usable by name
   in the `style` argument of the insertion functions; `bkm_replace_text()`
   gets a `style` argument.
+* `doc_add_style()`: bulleted list styles with `bullet` (predefined bullets
+  `"disc"`, `"circle"`, `"square"`, `"dash"`, `"arrow"`, `"check"` or any
+  character), `bullet_font`, `bullet_indent` (position of the bullet) and
+  `bullet_spacing` (distance between the bullet and the text). The bullet is
+  defined in the numbering part of the document (created if needed).
 * The `bkm_*` functions now warn ("Operation ignored") instead of failing when
   the bookmark is missing or the operation is impossible; so does
   `doc_replace_text_with_flextable()` when the text is not found.

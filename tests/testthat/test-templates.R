@@ -106,7 +106,7 @@ test_that("bkm_repeat repeats paragraphs", {
   doc <- doc_from_xml(base)
   bkm_repeat(doc, "line", people)
   expect_equal(paragraph_texts(doc), c("List:", "- Ana (30 years)", "- Bob (41 years)", "- Cy ( years)", "End"))
-  expect_equal(bkm_text(doc, "line"), "- Ana (30 years)\n- Bob (41 years)\n- Cy ( years)")
+  expect_equal(bkm_text(doc, "line"), "- Ana (30 years)\r- Bob (41 years)\r- Cy ( years)")
   # the NA age gives an empty text: the corresponding bold run disappears
   expect_equal(.count(.xml(doc, doc$main), "count(//w:b)"), 2)
   doc2 <- doc_from_xml(base)
@@ -130,7 +130,7 @@ test_that("bkm_repeat repeats table rows", {
   x <- .xml(doc, doc$main)
   rows <- vapply(as.list(.find_all(x, "//w:tr")), function(tr) paste(xml2::xml_text(.find_all(tr, ".//w:p")), collapse = "|"), "")
   expect_equal(rows, c("Product|Price", "Apples|2.50 \u20ac", "Pears|3.10 \u20ac", "Total|5.60 \u20ac"))
-  expect_equal(bkm_text(doc, "rows"), "Apples\n2.50 \u20ac\nPears\n3.10 \u20ac")
+  expect_equal(bkm_text(doc, "rows"), "Apples\r2.50 \u20ac\rPears\r3.10 \u20ac")
   d2 <- round_trip(doc)
   expect_equal(nrow(bkm_list(d2)), 1)
 })
