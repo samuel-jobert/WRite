@@ -16,9 +16,11 @@ bkm_replace_text(
 \arguments{
 \item{doc}{WRite document object.}
 
-\item{name}{Bookmark name.}
+\item{name}{Bookmark name, or vector of bookmark names.}
 
-\item{text}{New text (\code{"\\n"} = line break, \code{"\\t"} = tab).}
+\item{text}{New text (\code{"\\n"} = line break, \code{"\\t"} = tab). With several names:
+one text for all the bookmarks, or a vector of the same length as \code{name}.
+With a single name, a vector of texts is joined with line breaks.}
 
 \item{keep_bookmark}{Keep the bookmark around the new text?}
 
@@ -38,6 +40,11 @@ Replaces the content of the bookmark with \code{text}, keeping the formatting of
 the first text run of the bookmark (or, if the bookmark is empty, that of
 the run preceding it). The markers of other bookmarks are preserved (see
 \code{\link[=bkm_delete]{bkm_delete()}}).
+}
+\details{
+With a vector of names, all the bookmarks are located in a single search,
+then filled in the order given (faster than successive calls). A bookmark
+that is not found gives a warning and the others are still processed.
 }
 \section{Illustration}{
 
@@ -70,6 +77,11 @@ bkm_list(doc2)
 doc3 <- doc_new() |> doc_add_paragraph("x", bookmark = "bk")
 bkm_replace_text(doc3, "bk", "Total: <b>12</b> <i>euros</i>", html = TRUE)
 doc_text(doc3)
+
+# Several bookmarks at once
+doc4 <- doc_read(write_example("example"))
+bkm_replace_text(doc4, c("amount_2025", "my_bookmark"), c("2,000,000", "New middle"))
+doc_text(doc4)
 }
 \seealso{
 \code{\link[=bkm_insert_text]{bkm_insert_text()}} to impose a formatting,

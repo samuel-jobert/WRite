@@ -409,7 +409,7 @@ doc_add_paragraph <- function(doc, text = "", bold = NULL, italic = NULL, underl
   st <- .resolve_style(doc, style)
   f <- .format(bold, italic, underline, size, font,
                char_style = if (!is.null(st) && st$type == "character") st$id)
-  if (!is.null(bookmark) && bookmark %in% bkm_list(doc)$name) {
+  if (!is.null(bookmark) && bookmark %in% .bkm_names(doc)) {
     stop(sprintf("Bookmark '%s' already exists.", bookmark), call. = FALSE)
   }
   if (!is.null(bookmark) && !is.null(at_text) && occurrence == "all") {

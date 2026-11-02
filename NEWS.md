@@ -31,3 +31,21 @@
   `doc_replace_text_with_flextable()` when the text is not found.
 * Package logo (`man/figures/logo.png`).
 * The `magrittr` `%>%` operator is re-exported (the native pipe `|>` works too).
+* Performance: the content of a bookmark is located by walking from its start
+  to its end (cost proportional to the bookmark, no longer to the document), and
+  the insertion functions, `doc_fill()` and `doc_add_paragraph(bookmark = )` no
+  longer compute the text of every bookmark of the document. `bkm_replace_text()`,
+  `bkm_text()`, `bkm_list()`, `doc_fill()` and the `bkm_insert_*()` functions are
+  much faster on large documents.
+* Performance: `doc_fill()` (and `doc_mail_merge()`) replace all the tags in a
+  single pass over the document, and the list of the parts that can contain
+  bookmarks (body, headers, footers, notes) is cached instead of being
+  recomputed at each bookmark or text search.
+* `doc_save()` writes only file entries in the archive (no directory entries),
+  like Word.
+* `bkm_delete()` with several names locates all the bookmarks in a single
+  search (faster than successive calls, same result, including for overlapping
+  or nested bookmarks).
+* `bkm_replace_text()` accepts a vector of names (and one text or a vector of
+  texts): the bookmarks are located in a single search and filled in order.
+  `doc_fill()` uses it to fill all its bookmarks at once.

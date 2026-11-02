@@ -139,6 +139,7 @@
 
 .xml_set <- function(doc, path, x) {
   assign(path, x, envir = doc$parts)
+  .reset_content_parts(doc)
   invisible(x)
 }
 
@@ -218,6 +219,7 @@
   xml2::xml_set_attr(n, "Type", type)
   xml2::xml_set_attr(n, "Target", target)
   if (external) xml2::xml_set_attr(n, "TargetMode", "External")
+  .reset_content_parts(doc)
   id
 }
 
@@ -257,13 +259,24 @@
 # ---- Content parts ---------------------------------------------------------
 
 # Parts that can contain bookmarks: body, headers, footers and notes.
+# Cached in `doc`; the cache is reset by .add_rel() and .xml_set().
 .content_parts <- function(doc, notes = TRUE) {
+  key <- if (notes) "content_parts" else "content_parts_no_notes"
+  if (!is.null(doc[[key]])) return(doc[[key]])
   r <- .rels_df(doc, doc$main)
   types <- c("header", "footer", if (notes) c("footnotes", "endnotes"))
   r <- r[r$type %in% .rel_type(types) & is.na(r$mode), , drop = FALSE]
   others <- vapply(r$target, function(cb) .absolute_target(doc$main, cb), "")
   others <- others[vapply(others, function(p) .part_exists(doc, p), TRUE)]
-  unique(c(doc$main, unname(others)))
+  res <- unique(c(doc$main, unname(others)))
+  assign(key, res, envir = doc)
+  res
+}
+
+.reset_content_parts <- function(doc) {
+  doc$content_parts <- NULL
+  doc$content_parts_no_notes <- NULL
+  invisible()
 }
 
 # Evaluates `expr`; if it fails, warns and returns `value` instead of stopping.

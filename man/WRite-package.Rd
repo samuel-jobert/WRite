@@ -78,8 +78,21 @@ Claude Opus 5.5, from specifications and under the supervision of the
 maintainer, who verified that it works and remains responsible for it.
 }
 
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/samuel-jobert/WRite}
+  \item Report bugs at \url{https://github.com/samuel-jobert/WRite/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Samuel JOBERT \email{samuel.jobert@gmail.com}
+
+Authors:
+\itemize{
+  \item Samuel JOBERT \email{samuel.jobert@gmail.com}
+}
 
 }
 \keyword{internal}

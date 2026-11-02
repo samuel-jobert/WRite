@@ -70,7 +70,7 @@ doc_replace_text_with_flextable <- function(doc, text, ft) {
   if (!is.character(text) || length(text) != 1 || !nzchar(text)) stop("`text` must be a non-empty string.", call. = FALSE)
   source <- .flextable_source(ft)
   token <- "\uE000WRite-table\uE000"
-  n <- .replace_everywhere(doc, text, token)
+  n <- sum(.replace_everywhere(doc, text, token))
   if (n == 0) {
     warning(sprintf("Text '%s' not found in the document. Operation ignored.", text), call. = FALSE)
     return(invisible(doc))

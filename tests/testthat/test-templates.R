@@ -18,6 +18,13 @@ test_that("doc_fill fills bookmarks and tags and reports missing names", {
   expect_equal(r$tags, c(0L, 1L, 0L))
 })
 
+test_that("doc_fill counts the tags of each name in a single pass", {
+  doc <- doc_from_xml(paste0(p_xml(r_xml("{{a}} and {{b}}, {{a}} again")), p_xml(r_xml("{{b}}"))))
+  doc_fill(doc, list(a = "A", b = "B", c = "C"), warn = FALSE)
+  expect_equal(paragraph_texts(doc), c("A and B, A again", "B"))
+  expect_equal(attr(doc, "fill_report")$tags, c(2L, 2L, 0L))
+})
+
 test_that("doc_fill accepts a one-row data.frame, custom tags and NA", {
   doc <- doc_from_xml(p_xml(r_xml("Name: [name], city: [city]")))
   doc_fill(doc, data.frame(name = "Smith", city = NA), tags = c("[", "]"))

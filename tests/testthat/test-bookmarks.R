@@ -47,6 +47,31 @@ test_that("bkm_replace_text on an empty bookmark reuses the previous formatting"
   expect_equal(lengths(regmatches(body_xml(doc), gregexpr("<w:i/>", body_xml(doc)))), 2)
 })
 
+test_that("bkm_replace_text with several names", {
+  mk <- function() doc_from_xml(paste0(
+    p_xml(s_xml(1, "a"), r_xml("A", "<w:rPr><w:b/></w:rPr>"), e_xml(1), r_xml(" and "), s_xml(2, "b"), r_xml("B"), e_xml(2)),
+    p_xml(s_xml(3, "out"), r_xml("x "), s_xml(4, "in"), r_xml("y"), e_xml(4), r_xml(" z"), e_xml(3))))
+  d <- mk()
+  bkm_replace_text(d, c("a", "b"), c("1", "2"))
+  expect_equal(doc_text(d)[1], "1 and 2")
+  expect_true(grepl("<w:b/>", as.character(.find1(.xml(d, d$main), "//w:r[w:t='1']"))))
+  # Same result as successive calls, including nested bookmarks
+  d1 <- mk(); bkm_replace_text(d1, c("in", "out", "a"), "X")
+  d2 <- mk(); bkm_replace_text(d2, "in", "X"); bkm_replace_text(d2, "out", "X"); bkm_replace_text(d2, "a", "X")
+  expect_equal(doc_text(d1), doc_text(d2))
+  expect_equal(bkm_list(d1), bkm_list(d2))
+  # Missing name: warning, the others are filled
+  d <- mk()
+  expect_warning(bkm_replace_text(d, c("a", "zzz", "b"), "Q"), "zzz")
+  expect_equal(doc_text(d)[1], "Q and Q")
+  # Same name twice without keeping the bookmark
+  expect_warning(bkm_replace_text(d, c("a", "a"), c("1", "2"), keep_bookmark = FALSE), "no longer exists")
+  expect_error(bkm_replace_text(d, c("a", "b"), c("1", "2", "3")), "same length")
+  # A single name keeps joining a vector of texts with line breaks
+  d <- mk(); bkm_replace_text(d, "a", c("L1", "L2"))
+  expect_equal(bkm_text(d, "a"), "L1\nL2")
+})
+
 test_that("bkm_replace_text merges a bookmark spanning several paragraphs", {
   doc <- doc_from_xml(paste0(
     p_xml(r_xml("A1"), s_xml(1, "a"), r_xml("A2")), p_xml(r_xml("B")), p_xml(r_xml("C1"), e_xml(1), r_xml("C2"))))
@@ -101,6 +126,14 @@ test_that("keep_bookmark = FALSE removes the bookmark", {
   expect_equal(bkm_list(doc)$name, "empty_bookmark")
   expect_match(body_xml(doc), "No bookmark", fixed = TRUE)
   expect_match(body_xml(doc), "amount is </w:t></w:r><w:r><w:t xml:space=\"preserve\">100</w:t>", fixed = TRUE)
+})
+
+test_that("the cache of the content parts is reset when a relationship is added", {
+  doc <- doc_read(word_path("example.docx"))
+  parts <- .content_parts(doc)
+  expect_identical(doc$content_parts, parts)
+  .add_rel(doc, doc$main, .rel_type("footer"), "footer_new.xml")
+  expect_null(doc$content_parts)
 })
 
 test_that("a footer bookmark can be manipulated", {
@@ -224,6 +257,33 @@ test_that("bkm_delete: paragraph deletion in a table cell and across structures"
   bkm_delete(d, "x")
   expect_equal(.count(.xml(d, d$main), "count(//w:tbl)"), 0)
   expect_equal(doc_text(d), c("A", "B"))
+})
+
+test_that("bkm_delete: several overlapping bookmarks in one call", {
+  mk <- function() doc_from_xml(paste0(
+    p_xml(r_xml("A")),
+    p_xml(s_xml(1, "a"), r_xml("1")),
+    p_xml(s_xml(2, "b"), r_xml("2"), e_xml(1)),
+    p_xml(s_xml(3, "c"), r_xml("3"), e_xml(2)),
+    p_xml(r_xml("4"), e_xml(3)),
+    p_xml(s_xml(4, "keep"), r_xml("B"), e_xml(4))))
+  d1 <- mk(); bkm_delete(d1, c("a", "b"))
+  d2 <- mk(); bkm_delete(d2, "a"); bkm_delete(d2, "b")
+  d3 <- mk(); bkm_delete(d3, c("b", "a"))
+  expect_equal(doc_text(d1), c("A", "4", "B"))
+  expect_equal(doc_text(d2), doc_text(d1))
+  expect_equal(doc_text(d3), doc_text(d1))
+  expect_setequal(bkm_list(d1)$name, c("c", "keep"))
+  expect_equal(bkm_text(d1, "c"), "4")
+  # Nested bookmark: kept (empty) by the first deletion, then deleted
+  d4 <- doc_from_xml(paste0(p_xml(r_xml("A")), p_xml(s_xml(1, "out"), r_xml("x"), s_xml(2, "in"), r_xml("y"), e_xml(2), e_xml(1)), p_xml(r_xml("B"))))
+  expect_silent(bkm_delete(d4, c("out", "in")))
+  expect_equal(doc_text(d4), c("A", "B"))
+  expect_equal(nrow(bkm_list(d4)), 0)
+  # Bookmark removed with a deleted table row: warning, the others are processed
+  d5 <- doc_from_xml(tbl_xml(paste0(cell_xml("a1", bk(1, "a")), cell_xml("a2", bk(2, "b"))), paste0(cell_xml("b1", bk(3, "c")), cell_xml("b2"))))
+  expect_warning(bkm_delete(d5, c("a", "b", "c"), delete_row = TRUE), "'b' was deleted with a previous bookmark")
+  expect_equal(.count(.xml(d5, d5$main), "count(//w:tr)"), 0)
 })
 
 test_that("bkm_delete: table cell content and row", {

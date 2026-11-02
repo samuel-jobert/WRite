@@ -68,7 +68,7 @@ doc_replace_text <- function(doc, text, replacement, regex = FALSE, ignore_case 
   }
   .check_flag(html, "html")
   store <- if (html) new.env() else NULL
-  n <- .replace_everywhere(doc, text, replacement, regex, ignore_case, store)
+  n <- sum(.replace_everywhere(doc, text, replacement, regex, ignore_case, store))
   if (html) .apply_html(doc, store)
   attr(doc, "replacements") <- n
   invisible(doc)
@@ -102,12 +102,13 @@ doc_replace_text <- function(doc, text, replacement, regex = FALSE, ignore_case 
   if (ignore_case) pattern else NULL
 }
 
+# Returns the number of replacements for each element of `text`.
 .replace_everywhere <- function(doc, text, replacement, regex = FALSE, ignore_case = FALSE,
                                 store = NULL) {
   .merge_runs_once(doc)
   patterns <- lapply(text, .pattern, regex = regex, ignore_case = ignore_case)
   replacement <- rep_len(replacement, length(text))
-  n <- 0L
+  n <- integer(length(text))
   for (p in .content_parts(doc)) {
     for (par in .find_all(.xml(doc, p), "//w:p")) {
       full <- xml2::xml_text(par)
@@ -121,7 +122,7 @@ doc_replace_text <- function(doc, text, replacement, regex = FALSE, ignore_case 
         k <- .replace_in_paragraph(par, text[i], patterns[[i]], replacement[i], ignore_case,
                                    store = store)
         if (k > 0) {
-          n <- n + k
+          n[i] <- n[i] + k
           full <- xml2::xml_text(par)
         }
       }

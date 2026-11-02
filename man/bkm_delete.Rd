@@ -17,9 +17,13 @@ bkm_delete(
 \arguments{
 \item{doc}{WRite document object.}
 
-\item{name}{Bookmark name, or vector of bookmark names. When the operation
-cannot be done for a bookmark (name not found, unsupported structure), a
-warning is given and the other bookmarks are still processed.
+\item{name}{Bookmark name, or vector of bookmark names. All the bookmarks
+are located in a single search, then deleted in the order given;
+overlapping or nested bookmarks are handled as with successive calls
+(each deletion preserves the markers of the others). When the operation
+cannot be done for a bookmark (name not found, unsupported structure,
+bookmark already deleted with a table row), a warning is given and the
+other bookmarks are still processed.
 Not used if \code{whole_document = TRUE}.}
 
 \item{delete_content}{Delete the content of the bookmark?}

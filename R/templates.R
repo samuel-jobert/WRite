@@ -84,16 +84,16 @@ doc_fill <- function(doc, values, tags = c("{{", "}}"), bookmarks = TRUE, warn =
   if (!is.list(values) || is.null(names(values)) || any(!nzchar(names(values)))) {
     stop("`values` must be a named list.", call. = FALSE)
   }
-  bkm_names <- if (isTRUE(bookmarks)) bkm_list(doc)$name else character()
+  bkm_names <- if (isTRUE(bookmarks)) .bkm_names(doc) else character()
   report <- data.frame(name = names(values), bookmark = FALSE, tags = 0L, stringsAsFactors = FALSE)
-  for (i in seq_along(values)) {
-    name <- names(values)[i]
-    text <- .value_text(values[[i]])
-    if (name %in% bkm_names) {
-      bkm_replace_text(doc, name, text)
-      report$bookmark[i] <- TRUE
-    }
-    if (!is.null(tags)) report$tags[i] <- .replace_everywhere(doc, paste0(tags[1], name, tags[2]), text)
+  texts <- vapply(values, .value_text, "")
+  report$bookmark <- names(values) %in% bkm_names
+  if (any(report$bookmark)) {
+    bkm_replace_text(doc, names(values)[report$bookmark], unname(texts[report$bookmark]))
+  }
+  # All the tags in a single pass over the document.
+  if (!is.null(tags) && length(values) > 0) {
+    report$tags <- .replace_everywhere(doc, paste0(tags[1], names(values), tags[2]), unname(texts))
   }
   report
 }

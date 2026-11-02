@@ -118,7 +118,8 @@ doc_save <- function(doc, path) {
   path <- normalizePath(path, winslash = "/", mustWork = FALSE)
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   if (file.exists(path)) file.remove(path)
-  zip::zip(path, files = files, root = doc$dir, mode = "mirror")
+  # Like Word: file entries only, no directory entries.
+  zip::zip(path, files = files, root = doc$dir, mode = "mirror", include_directories = FALSE)
   invisible(doc)
 }
 

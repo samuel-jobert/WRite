@@ -17,6 +17,42 @@
   stop(sprintf("Bookmark '%s' not found.", name), call. = FALSE)
 }
 
+# Locates several bookmarks with one search per part (same rules as .bkm_find()).
+# Returns a named list: a bookmark as in .bkm_find(), or the error message.
+.bkm_find_all <- function(doc, names) {
+  if (length(names) == 1) {
+    res <- list(tryCatch(.bkm_find(doc, names), error = function(e) conditionMessage(e)))
+    names(res) <- names
+    return(res)
+  }
+  res <- as.list(sprintf("Bookmark '%s' not found.", names))
+  names(res) <- names
+  todo <- names
+  for (p in .content_parts(doc)) {
+    if (length(todo) == 0) break
+    x <- .xml(doc, p)
+    # Starts and ends together, in document order.
+    m <- .find_all(x, "//w:bookmarkStart | //w:bookmarkEnd")
+    if (length(m) == 0) next
+    is_start <- .name(m) == "w:bookmarkStart"
+    ids <- .attr(m, "w:id")
+    nms <- .attr(m, "w:name")
+    for (nm in intersect(todo, nms[is_start])) {
+      k <- which(is_start & nms == nm)
+      if (length(k) > 1) warning(sprintf("Several bookmarks named '%s': only the first one is used.", nm), call. = FALSE)
+      i <- k[1]
+      j <- which(!is_start & ids == ids[i] & seq_along(m) > i)
+      res[[nm]] <- if (length(j) == 0) {
+        sprintf("The end of bookmark '%s' was not found (corrupted document?).", nm)
+      } else {
+        list(part = p, xml = x, start = m[[i]], end = m[[j[1]]], id = ids[i])
+      }
+    }
+    todo <- setdiff(todo, nms[is_start])
+  }
+  res
+}
+
 .bookmark_max_id <- function(doc) {
   ids <- unlist(lapply(.content_parts(doc), function(p) {
     .attr(.find_all(.xml(doc, p), "//w:bookmarkStart | //w:bookmarkEnd"), "w:id")
@@ -25,23 +61,38 @@
   max(c(-1L, ids), na.rm = TRUE)
 }
 
+# Bookmark names of the document (same as bkm_list(doc)$name, without computing the texts).
+.bkm_names <- function(doc) {
+  as.character(unlist(lapply(.content_parts(doc), function(p) {
+    .attr(.find_all(.xml(doc, p), "//w:bookmarkStart"), "w:name")
+  })))
+}
+
 # "Maximal" elements strictly between the start and the end of the bookmark,
 # in document order (ancestors of the end, partially covered, are excluded).
+# Walks from the start to the end: the cost depends on the bookmark, not on the document.
 .range <- function(bkm) {
-  all_nodes <- xml2::xml_find_all(bkm$xml, "//*")
-  i_start <- .index(bkm$start)
-  i_end <- .index(bkm$end)
-  end_ancestors <- vapply(as.list(.find_all(bkm$end, "ancestor::*")), .index, 0)
-  res <- list()
-  i <- i_start + 1
-  while (i < i_end) {
-    if (i %in% end_ancestors) {
-      i <- i + 1
-      next
+  end_ancestors <- as.list(.find_all(bkm$end, "ancestor::*"))
+  is_end_ancestor <- function(n) any(vapply(end_ancestors, identical, TRUE, n))
+  # Next element after the subtree of `n`.
+  next_node <- function(n) {
+    repeat {
+      s <- .find1(n, "following-sibling::*[1]")
+      if (!.is_missing(s)) return(s)
+      n <- xml2::xml_parent(n)
+      if (.is_missing(n)) return(n)
     }
-    n <- all_nodes[[i + 1]]
-    res[[length(res) + 1]] <- n
-    i <- i + 1 + xml2::xml_find_num(n, "count(descendant::*)")
+  }
+  res <- list()
+  n <- next_node(bkm$start)
+  while (!identical(n, bkm$end)) {
+    if (.is_missing(n)) stop("The end of the bookmark was not found (corrupted document?).", call. = FALSE)
+    if (is_end_ancestor(n)) {
+      n <- .find1(n, "*[1]")
+    } else {
+      res[[length(res) + 1]] <- n
+      n <- next_node(n)
+    }
   }
   res
 }
@@ -49,16 +100,15 @@
 # Text contained in a list of elements (paragraphs separated by "\n").
 .nodes_text <- function(nodes) {
   pieces <- character()
-  prev_p <- NA
+  prev_p <- NULL
   for (n in nodes) {
     els <- .find_all(n, paste(
       "descendant-or-self::w:t[parent::w:r]", "descendant-or-self::w:tab[parent::w:r]",
       "descendant-or-self::w:br[parent::w:r]", "descendant-or-self::w:cr[parent::w:r]", sep = " | "))
     for (e in els) {
       p <- .paragraph_of(e)
-      ip <- if (is.null(p)) NA else .index(p)
-      if (!is.na(prev_p) && !is.na(ip) && ip != prev_p) pieces <- c(pieces, "\n")
-      prev_p <- ip
+      if (!is.null(prev_p) && !is.null(p) && !identical(p, prev_p)) pieces <- c(pieces, "\n")
+      prev_p <- p
       nm <- .name(e)
       pieces <- c(pieces, switch(nm, "w:t" = xml2::xml_text(e), "w:tab" = "\t",
                                  if (identical(.attr(e, "w:type"), "page")) "\f" else "\n"))
@@ -69,8 +119,7 @@
 
 # Deletes the content of a bookmark while keeping the markers of other bookmarks:
 # ends of other bookmarks are moved before the start, starts after the end.
-.empty_range <- function(bkm) {
-  nodes <- .range(bkm)
+.empty_range <- function(bkm, nodes = .range(bkm)) {
   p_start <- .paragraph_of(bkm$start)
   p_end <- .paragraph_of(bkm$end)
   if (!is.null(p_start) && !is.null(p_end) && !identical(p_start, p_end) &&
@@ -271,9 +320,13 @@ bkm_text <- function(doc, name) {
 #' The other bookmarks having a marker in a deleted row are deleted as well.
 #'
 #' @param doc WRite document object.
-#' @param name Bookmark name, or vector of bookmark names. When the operation
-#'   cannot be done for a bookmark (name not found, unsupported structure), a
-#'   warning is given and the other bookmarks are still processed.
+#' @param name Bookmark name, or vector of bookmark names. All the bookmarks
+#'   are located in a single search, then deleted in the order given;
+#'   overlapping or nested bookmarks are handled as with successive calls
+#'   (each deletion preserves the markers of the others). When the operation
+#'   cannot be done for a bookmark (name not found, unsupported structure,
+#'   bookmark already deleted with a table row), a warning is given and the
+#'   other bookmarks are still processed.
 #'   Not used if `whole_document = TRUE`.
 #' @param delete_content Delete the content of the bookmark?
 #' @param delete_bookmark Delete the markers of the bookmark? Ignored (always
@@ -339,9 +392,17 @@ bkm_delete <- function(doc, name = NULL, delete_content = TRUE, delete_bookmark 
   if (!is.character(name) || length(name) < 1 || anyNA(name) || !all(nzchar(name))) {
     stop("`name` must be a bookmark name (or a vector of names).", call. = FALSE)
   }
-  for (nm in unique(name)) {
+  names_u <- unique(name)
+  found <- .bkm_find_all(doc, names_u)
+  for (nm in names_u) {
     tryCatch({
-      .delete_one(.bkm_find(doc, nm), delete_content, delete_bookmark, delete_paragraph, delete_row)
+      bkm <- found[[nm]]
+      if (is.character(bkm)) stop(bkm, call. = FALSE)
+      # Possible with delete_row: a bookmark with a marker in a deleted row is deleted too.
+      if (!.attached(bkm$start) || !.attached(bkm$end)) {
+        stop(sprintf("Bookmark '%s' was deleted with a previous bookmark.", nm), call. = FALSE)
+      }
+      .delete_one(bkm, delete_content, delete_bookmark, delete_paragraph, delete_row)
     }, error = function(e) warning(sprintf("%s Bookmark ignored.", conditionMessage(e)), call. = FALSE))
   }
   invisible(doc)
@@ -454,9 +515,15 @@ bkm_delete <- function(doc, name = NULL, delete_content = TRUE, delete_bookmark 
 #' the run preceding it). The markers of other bookmarks are preserved (see
 #' [bkm_delete()]).
 #'
+#' With a vector of names, all the bookmarks are located in a single search,
+#' then filled in the order given (faster than successive calls). A bookmark
+#' that is not found gives a warning and the others are still processed.
+#'
 #' @param doc WRite document object.
-#' @param name Bookmark name.
-#' @param text New text (`"\n"` = line break, `"\t"` = tab).
+#' @param name Bookmark name, or vector of bookmark names.
+#' @param text New text (`"\n"` = line break, `"\t"` = tab). With several names:
+#'   one text for all the bookmarks, or a vector of the same length as `name`.
+#'   With a single name, a vector of texts is joined with line breaks.
 #' @param keep_bookmark Keep the bookmark around the new text?
 #' @param html Interpret the HTML tags of `text` (`<b>`, `<i>`, `<u>`, `<s>`,
 #'   `<br>`...)? See [doc_add_paragraph()]. The formatting of the tags is
@@ -495,17 +562,49 @@ bkm_delete <- function(doc, name = NULL, delete_content = TRUE, delete_bookmark 
 #' doc3 <- doc_new() |> doc_add_paragraph("x", bookmark = "bk")
 #' bkm_replace_text(doc3, "bk", "Total: <b>12</b> <i>euros</i>", html = TRUE)
 #' doc_text(doc3)
+#'
+#' # Several bookmarks at once
+#' doc4 <- doc_read(write_example("example"))
+#' bkm_replace_text(doc4, c("amount_2025", "my_bookmark"), c("2,000,000", "New middle"))
+#' doc_text(doc4)
 #' @export
 bkm_replace_text <- function(doc, name, text, keep_bookmark = TRUE, html = FALSE,
                              style = NULL) {
   .check_doc(doc)
   .check_flag(html, "html")
   st <- .resolve_style(doc, style)
-  .bkm_guard({
-  bkm <- .bkm_find(doc, name)
+  if (length(name) == 1) {
+    .bkm_guard(.replace_bkm_text(.bkm_find(doc, name), text, keep_bookmark, html, st), NULL)
+    return(invisible(doc))
+  }
+  if (!is.character(name) || length(name) < 1 || anyNA(name) || !all(nzchar(name))) {
+    stop("`name` must be a bookmark name (or a vector of names).", call. = FALSE)
+  }
+  if (!length(text) %in% c(1, length(name))) {
+    stop("`text` must be a string or a vector of the same length as `name`.", call. = FALSE)
+  }
+  text <- rep_len(text, length(name))
+  found <- .bkm_find_all(doc, unique(name))
+  for (i in seq_along(name)) {
+    .bkm_guard({
+      bkm <- found[[name[i]]]
+      if (is.character(bkm)) stop(bkm, call. = FALSE)
+      # Markers already removed by a previous element (same name with keep_bookmark = FALSE).
+      if (!.attached(bkm$start) || !.attached(bkm$end)) {
+        stop(sprintf("Bookmark '%s' no longer exists.", name[i]), call. = FALSE)
+      }
+      .replace_bkm_text(bkm, text[[i]], keep_bookmark, html, st)
+    }, NULL)
+  }
+  invisible(doc)
+}
+
+# Core of bkm_replace_text() for one bookmark (`st`: resolved style or NULL).
+.replace_bkm_text <- function(bkm, text, keep_bookmark, html, st) {
+  nodes <- .range(bkm)
   rpr <- NULL
   in_range <- FALSE
-  for (n in .range(bkm)) {
+  for (n in nodes) {
     r <- .find1(n, "descendant-or-self::w:r[w:t][1]")
     if (!.is_missing(r)) {
       rpr <- .find1(r, "w:rPr")
@@ -517,14 +616,13 @@ bkm_replace_text <- function(doc, name, text, keep_bookmark = TRUE, html = FALSE
   if (.is_missing(rpr)) rpr <- NULL
   # The rPr of the deleted content is detached to be reused; otherwise it is copied.
   if (!is.null(rpr) && in_range) xml2::xml_remove(rpr)
-  .empty_range(bkm)
+  .empty_range(bkm, nodes)
   f <- .format(char_style = if (!is.null(st) && st$type == "character") st$id)
   ins <- .insert_runs(bkm$start, "after", text, f, html)
   if (!is.null(rpr)) for (r in ins$runs) .merge_rpr(r, rpr)
   if (!is.null(st) && st$type == "paragraph") .set_paragraph_style(ins$p, st$id)
   if (!isTRUE(keep_bookmark)) .remove_markers(bkm)
-  }, NULL)
-  invisible(doc)
+  invisible(bkm)
 }
 
 # Inserts a run next to a marker; creates a paragraph if the marker is

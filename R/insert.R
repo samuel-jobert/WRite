@@ -96,7 +96,7 @@ bkm_insert_doc <- function(doc, name, source, position = c("replace", "before", 
 .insert_source <- function(doc, bkm, source, position, keep_bookmark, blocks = NULL) {
   ctx <- new.env(parent = emptyenv())
   ctx$bkm_max <- .bookmark_max_id(doc)
-  ctx$bkm_names <- bkm_list(doc)$name
+  ctx$bkm_names <- .bkm_names(doc)
   ctx$docpr_max <- .docpr_max(doc)
   ctx$parts <- new.env(parent = emptyenv())
   ctx$rels <- list()
